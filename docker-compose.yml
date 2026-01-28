@@ -1,0 +1,51 @@
+services:
+  asr:
+    build:
+      context: ./asr-service
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "small"
+      ASR_COMPUTE_TYPE: "int8"
+    restart: unless-stopped
+    # Optional: Cache-Volume für HF/Modelle, damit Neustarts schneller sind
+    volumes:
+      - hf_cache:/root/.cache
+    networks:
+      - proxy-network
+
+  asr-vibevoice:
+    build:
+      context: ./asr-service-vibevoice
+    expose:
+      - "8000"
+    environment:
+      VIBEVOICE_MODEL_ID: "microsoft/VibeVoice-ASR"
+      MAX_CONCURRENCY: "1"
+      # optional:
+      # CHUNK_LENGTH_S: "20"
+      # STRIDE_LENGTH_S: "5"
+    restart: unless-stopped
+    volumes:
+      - hf_cache:/root/.cache
+    networks:
+      - proxy-network
+
+  sentiment:
+    build:
+      context: ./sentiment-service
+    expose:
+      - "8000"
+    environment:
+      SENTIMENT_MODEL_ID: "cardiffnlp/twitter-xlm-roberta-base-sentiment"
+    restart: unless-stopped
+    volumes:
+      - hf_cache:/root/.cache
+    networks:
+      - proxy-network
+
+volumes:
+  hf_cache:
+networks:
+  proxy-network:
+    external: true
