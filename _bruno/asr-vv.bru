@@ -1,0 +1,26 @@
+meta {
+  name: asr-vv
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrlAsr}}/v1/asr
+  body: multipartForm
+  auth: inherit
+}
+
+headers {
+  Content-Type: multipart/form-data
+}
+
+body:multipart-form {
+  file: @file(/Users/christianbister/Downloads/Walkthrough IP26.m4a)
+  language: auto
+  timestamps: true
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
