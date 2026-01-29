@@ -14,23 +14,6 @@ services:
     networks:
       - proxy-network
 
-  asr-vibevoice:
-    build:
-      context: ./asr-service-vibevoice
-    expose:
-      - "8000"
-    environment:
-      VIBEVOICE_MODEL_ID: "microsoft/VibeVoice-ASR"
-      MAX_CONCURRENCY: "1"
-      # optional:
-      # CHUNK_LENGTH_S: "20"
-      # STRIDE_LENGTH_S: "5"
-    restart: unless-stopped
-    volumes:
-      - hf_cache:/root/.cache
-    networks:
-      - proxy-network
-
   sentiment:
     build:
       context: ./sentiment-service
