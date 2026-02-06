@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import socket
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from transformers import pipeline
@@ -29,7 +30,11 @@ class SentimentResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "sentiment"}
+    return {
+        "status": "ok",
+        "service": "sentiment",
+        "hostname": socket.gethostname()
+    }
 
 @app.post("/v1/sentiment", response_model=SentimentResponse)
 def sentiment(req: SentimentRequest):
