@@ -1,0 +1,20 @@
+meta {
+  name: barcode
+  type: http
+  seq: 7
+}
+
+post {
+  url: https://gateway-dev.commybisterapiservices.orb.local/barcode/v1/barcode/highlight
+  body: multipartForm
+  auth: inherit
+}
+
+body:multipart-form {
+  file: @file(/Users/christianbister/Downloads/ca7aa61d-129f-4785-a3a4-09e851a07f8b (1).jpeg)
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

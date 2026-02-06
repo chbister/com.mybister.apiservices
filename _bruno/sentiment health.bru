@@ -1,0 +1,16 @@
+meta {
+  name: sentiment health
+  type: http
+  seq: 4
+}
+
+get {
+  url: https://gateway-dev.commybisterapiservices.orb.local/sentiment/health
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
