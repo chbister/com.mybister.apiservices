@@ -1,0 +1,20 @@
+meta {
+  name: callback tester
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/callback-tester/listen
+  body: json
+  auth: inherit
+}
+
+body:json {
+  { "foobar": "barfoo"}
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
