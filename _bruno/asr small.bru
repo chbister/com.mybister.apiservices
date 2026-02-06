@@ -1,0 +1,27 @@
+meta {
+  name: asr small
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/asr-small/v1/asr
+  body: multipartForm
+  auth: inherit
+}
+
+headers {
+  Content-Type: multipart/form-data
+}
+
+body:multipart-form {
+  language: auto
+  timestamps: true
+  file_url: https://garrio.de/wp-content/uploads/2025/03/garrioCOM-Werbefilm-Launch.mp4
+  ~file: @file(/Users/christianbister/Downloads/Walkthrough IP26.m4a)
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
