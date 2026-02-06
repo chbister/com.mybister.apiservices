@@ -184,6 +184,7 @@ services:
       - emotion-vibe-dev
       - emotion-state-dev
       - processor-dev
+      - callback-tester-dev
     profiles: [ "dev" ]
     networks:
       - proxy-network
@@ -397,10 +398,40 @@ services:
         aliases:
           - processor
 
+  callback-tester:
+    build:
+      context: ./callback-tester
+    image: callback-tester:local
+    expose:
+      - "8000"
+    volumes:
+      - callback_data:/srv/callbacks
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - callback-tester
+
+  callback-tester-dev:
+    image: callback-tester:local
+    expose:
+      - "8000"
+    volumes:
+      - ./callback-tester/app:/srv/app:rw
+      - callback_data:/srv/callbacks
+    environment:
+      UVICORN_RELOAD: "1"
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - callback-tester
+
 volumes:
   hf_cache:
   ct2_cache:
   asr_jobs:
+  callback_data:
 networks:
   proxy-network:
     external: true
