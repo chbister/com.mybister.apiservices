@@ -1,11 +1,11 @@
 meta {
   name: emotion nuance
   type: http
-  seq: 14
+  seq: 15
 }
 
 post {
-  url: https://gateway-dev.commybisterapiservices.orb.local/sentiment/v1/sentiment
+  url: https://gateway-dev.commybisterapiservices.orb.local/emotion-state/v1/emotion
   body: json
   auth: inherit
 }
@@ -16,7 +16,7 @@ headers {
 
 body:json {
   {
-    "text": "Ich freue mich total, dich zu sehen!"
+    "text": "ich bin glücklich!"
   }
 }
 

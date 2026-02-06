@@ -1,17 +1,19 @@
 meta {
   name: barcode
   type: http
-  seq: 7
+  seq: 8
 }
 
 post {
-  url: https://gateway-dev.commybisterapiservices.orb.local/barcode/v1/barcode/highlight
+  url: {{baseUrl}}/barcode/v1/barcode
   body: multipartForm
   auth: inherit
 }
 
 body:multipart-form {
-  file: @file(/Users/christianbister/Downloads/ca7aa61d-129f-4785-a3a4-09e851a07f8b (1).jpeg)
+  file: @file(/Users/christianbister/Downloads/Greenshot 2026-02-06 00.40.12.png)
+  ~file_url: https://storage.googleapis.com/kagglesdsdata/datasets/3797487/8174209/05102009082.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=databundle-worker-v2%40kaggle-161607.iam.gserviceaccount.com%2F20260206%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260206T060754Z&X-Goog-Expires=345600&X-Goog-SignedHeaders=host&X-Goog-Signature=665ceeca111b0e2c07606555b399bfda01fcc39df0294dc8c766accce8ed6353031a35b4de590ca62a566fe1a7538c03ab668ea83ac340c7d5fdd676f6178d69586e9bb63515802bb873f7d8be1343c99c7500e45f9b445663a2799816d394839167ab13f89446859667eb9aecf157158d684d572d66b1cfdca541bfaa071671df3a0b8f95292b5c6ff9d49a2c4c7d42c5de7f644cfccf73ce9b950eb3260cef21d270e427cac7038ca780be47588916f67ae63bb20cbf354545bfb6e8fb0d50b356ff1c93e5d4978d0a109b4a80a9e535da5bf6f0a18b3c6ca9328db3bfe2328c259016b5693e6016ad85e417c98eac90ea199aac683fccf35ef3ffde45b5cf
+  ~file_url: https://cdn-thumbs.ohmyprints.net/1/3afbab5d63357e39890960fd0886fee8/817x600/dynamic-size/fit/6cbb347acc02bcd69b7fd7763d9c0bb5f9d9cc7aa375aacb2ccacb8c409604c3.jpg
 }
 
 settings {

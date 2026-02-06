@@ -5,13 +5,15 @@ meta {
 }
 
 post {
-  url: https://gateway-dev.commybisterapiservices.orb.local/barcode/v1/barcode/highlight
+  url: {{baseUrl}}/barcode/v1/barcode/highlight
   body: multipartForm
   auth: inherit
 }
 
 body:multipart-form {
-  file: @file(/Users/christianbister/Downloads/ca7aa61d-129f-4785-a3a4-09e851a07f8b (1).jpeg)
+  file: @file(/Users/christianbister/Downloads/Greenshot 2026-02-06 00.40.12.png)
+  file_url: https://cdn-thumbs.ohmyprints.net/1/3afbab5d63357e39890960fd0886fee8/817x600/dynamic-size/fit/6cbb347acc02bcd69b7fd7763d9c0bb5f9d9cc7aa375aacb2ccacb8c409604c3.jpg
+  ~file_url: https://storage.googleapis.com/kagglesdsdata/datasets/3797487/8174209/05102009082.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=databundle-worker-v2%40kaggle-161607.iam.gserviceaccount.com%2F20260206%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260206T060754Z&X-Goog-Expires=345600&X-Goog-SignedHeaders=host&X-Goog-Signature=https://www.shutterstock.com/shutterstock/photos/2508088529/display_1500/stock-vector-set-of-barcode-label-templates-isolated-on-white-background-collection-of-barcode-icons-visual-2508088529.jpg
 }
 
 settings {
