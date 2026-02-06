@@ -45,6 +45,7 @@ def health():
     return {
         "status": "ok",
         "service": "emotion",
+        "model": MODEL_ID,
         "hostname": socket.gethostname(),
         "datetime": datetime.utcnow().isoformat()
     }

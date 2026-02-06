@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import socket
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from transformers import pipeline
@@ -33,7 +34,9 @@ def health():
     return {
         "status": "ok",
         "service": "sentiment",
-        "hostname": socket.gethostname()
+        "model": MODEL_ID,
+        "hostname": socket.gethostname(),
+        "datetime": datetime.utcnow().isoformat()
     }
 
 @app.post("/v1/sentiment", response_model=SentimentResponse)

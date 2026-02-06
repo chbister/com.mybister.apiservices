@@ -111,6 +111,7 @@ def health():
     return {
         "status": "ok",
         "service": "asr",
+        "model": MODEL_SIZE,
         "hostname": socket.gethostname(),
         "datetime": datetime.utcnow().isoformat()
     }
