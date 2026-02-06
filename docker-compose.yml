@@ -1,22 +1,223 @@
+x-asr-base: &asr-base
+  build:
+    context: ./asr-service
+  image: asr-service:local
+  environment:
+    ASR_COMPUTE_TYPE: "int8"
+    ASR_DEFAULT_LANGUAGE: "auto"
+    ASR_ASYNC_THRESHOLD: "300"
+    ASR_JOBS_DIR: "/srv/jobs"
+    UVICORN_HOST: "0.0.0.0"
+    UVICORN_PORT: "8000"
+    UVICORN_WORKERS: "2"
+    OMP_NUM_THREADS: "1"
+    CT2_NUM_THREADS: "1"
+  volumes:
+    - hf_cache:/root/.cache/huggingface
+    - ct2_cache:/root/.cache/ctranslate2
+    - asr_jobs:/srv/jobs
+
 services:
-  asr:
-    build:
-      context: ./asr-service
+  # --- PRODUCTION SERVICES (Profile: prod) ---
+  asr-tiny:
+    <<: *asr-base
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "tiny"
+      UVICORN_LOG_LEVEL: "info"
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-tiny-link
+
+  asr-small:
+    <<: *asr-base
     expose:
       - "8000"
     environment:
       ASR_MODEL_SIZE: "small"
-      ASR_COMPUTE_TYPE: "int8"
-    restart: unless-stopped
-    # Optional: Cache-Volume für HF/Modelle, damit Neustarts schneller sind
+      UVICORN_LOG_LEVEL: "info"
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-small-link
+
+  asr-medium:
+    <<: *asr-base
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "medium"
+      UVICORN_LOG_LEVEL: "info"
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-medium-link
+
+  asr-large:
+    <<: *asr-base
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "large-v3"
+      UVICORN_LOG_LEVEL: "info"
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-large-link
+
+  # --- DEVELOPMENT SERVICES (Profile: dev) ---
+  asr-tiny-dev:
+    <<: *asr-base
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "tiny"
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
     volumes:
-      - hf_cache:/root/.cache
+      - ./asr-service/app:/srv/app:rw
+      - hf_cache:/root/.cache/huggingface
+      - ct2_cache:/root/.cache/ctranslate2
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-tiny-link
+
+  asr-small-dev:
+    <<: *asr-base
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "small"
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
+    volumes:
+      - ./asr-service/app:/srv/app:rw
+      - hf_cache:/root/.cache/huggingface
+      - ct2_cache:/root/.cache/ctranslate2
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-small-link
+
+  asr-medium-dev:
+    <<: *asr-base
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "medium"
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
+    volumes:
+      - ./asr-service/app:/srv/app:rw
+      - hf_cache:/root/.cache/huggingface
+      - ct2_cache:/root/.cache/ctranslate2
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-medium-link
+
+  asr-large-dev:
+    <<: *asr-base
+    expose:
+      - "8000"
+    environment:
+      ASR_MODEL_SIZE: "large-v3"
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
+    volumes:
+      - ./asr-service/app:/srv/app:rw
+      - hf_cache:/root/.cache/huggingface
+      - ct2_cache:/root/.cache/ctranslate2
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - asr-large-link
+
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - asr-tiny
+      - asr-small
+      - asr-medium
+      - asr-large
+      - barcode
+      - sentiment
+      - emotion
+      - emotion-nuance
+      - emotion-vibe
+      - emotion-state
+      - processor
+    profiles: [ "prod" ]
     networks:
       - proxy-network
+
+  gateway-dev:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - asr-tiny-dev
+      - asr-small-dev
+      - asr-medium-dev
+      - asr-large-dev
+      - barcode-dev
+      - sentiment-dev
+      - emotion-dev
+      - emotion-nuance-dev
+      - emotion-vibe-dev
+      - emotion-state-dev
+      - processor-dev
+    profiles: [ "dev" ]
+    networks:
+      - proxy-network
+
+  barcode:
+    build:
+      context: ./barcode-service
+    image: barcode-service:local
+    expose:
+      - "8000"
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - barcode
+
+  barcode-dev:
+    image: barcode-service:local
+    expose:
+      - "8000"
+    volumes:
+      - ./barcode-service/app:/srv/app:rw
+    environment:
+      UVICORN_RELOAD: "1"
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - barcode
 
   sentiment:
     build:
       context: ./sentiment-service
+    image: sentiment-service:local
     expose:
       - "8000"
     environment:
@@ -24,11 +225,182 @@ services:
     restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
+    profiles: [ "prod" ]
     networks:
-      - proxy-network
+      proxy-network:
+        aliases:
+          - sentiment
+
+  sentiment-dev:
+    image: sentiment-service:local
+    expose:
+      - "8000"
+    environment:
+      SENTIMENT_MODEL_ID: "cardiffnlp/twitter-xlm-roberta-base-sentiment"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./sentiment-service/app:/srv/app:rw
+      - hf_cache:/root/.cache
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - sentiment
+
+  emotion:
+    build:
+      context: ./emotion-service
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "lxyuan/distilbert-base-multilingual-cased-sentiments-student"
+    volumes:
+      - hf_cache:/root/.cache
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion
+
+  emotion-dev:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "lxyuan/distilbert-base-multilingual-cased-sentiments-student"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./emotion-service/app:/srv/app:rw
+      - hf_cache:/root/.cache
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion
+
+  # --- EMOTION MODEL VARIANTS (Profile: prod) ---
+  emotion-nuance:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "SamLowe/roberta-base-go_emotions"
+    volumes:
+      - hf_cache:/root/.cache
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion-nuance
+
+  emotion-vibe:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "nlptown/bert-base-multilingual-uncased-sentiment" # Excellent for vibe/stars across languages
+    volumes:
+      - hf_cache:/root/.cache
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion-vibe
+
+  emotion-state:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "j-hartmann/emotion-english-distilroberta-base" # 7 core emotions
+    volumes:
+      - hf_cache:/root/.cache
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion-state
+
+  # --- EMOTION MODEL VARIANTS (Profile: dev) ---
+  emotion-nuance-dev:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "SamLowe/roberta-base-go_emotions"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./emotion-service/app:/srv/app:rw
+      - hf_cache:/root/.cache
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion-nuance
+
+  emotion-vibe-dev:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "nlptown/bert-base-multilingual-uncased-sentiment"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./emotion-service/app:/srv/app:rw
+      - hf_cache:/root/.cache
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion-vibe
+
+  emotion-state-dev:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      EMOTION_MODEL_ID: "j-hartmann/emotion-english-distilroberta-base"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./emotion-service/app:/srv/app:rw
+      - hf_cache:/root/.cache
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - emotion-state
+
+  processor:
+    build:
+      context: ./processor-service
+    image: processor-service:local
+    expose:
+      - "8000"
+    profiles: [ "prod" ]
+    networks:
+      proxy-network:
+        aliases:
+          - processor
+
+  processor-dev:
+    image: processor-service:local
+    expose:
+      - "8000"
+    volumes:
+      - ./processor-service/app:/srv/app:rw
+    environment:
+      UVICORN_RELOAD: "1"
+    profiles: [ "dev" ]
+    networks:
+      proxy-network:
+        aliases:
+          - processor
 
 volumes:
   hf_cache:
+  ct2_cache:
+  asr_jobs:
 networks:
   proxy-network:
     external: true
