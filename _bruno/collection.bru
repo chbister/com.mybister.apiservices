@@ -4,6 +4,6 @@ auth {
 
 auth:apikey {
   key: X-API-Key
-  value: secret-value
+  value: {{process.env.ASK_MYBISTER_COM_API_KEY}}
   placement: header
 }
