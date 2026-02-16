@@ -162,6 +162,7 @@ services:
       - emotion-vibe
       - emotion-state
       - processor
+      - metadata
     profiles: [ "prod" ]
     networks:
       - proxy-network
@@ -426,6 +427,21 @@ services:
       proxy-network:
         aliases:
           - callback-tester
+
+  metadata:
+    build: 
+      context: ./metadata-service
+    image: metadata:local
+    environment:
+      - MAX_DOWNLOAD_BYTES=209715200
+      - DOWNLOAD_TIMEOUT_S=30
+    profiles: [ "prod" ]
+    expose:
+      - "8000"
+    networks:
+      proxy-network:
+        aliases:
+          - metadata
 
 volumes:
   hf_cache:
