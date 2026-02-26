@@ -3,9 +3,6 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-WORKDIR /srv
-
-# System deps:
 # - exiftool: broad metadata extraction
 # - ffmpeg: ffprobe for audio/video metadata
 # - libmagic1: python-magic backend
@@ -16,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /srv
 
 COPY requirements.txt /srv/requirements.txt
 RUN pip install --no-cache-dir -r /srv/requirements.txt
