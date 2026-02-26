@@ -555,7 +555,7 @@ services:
     expose:
       - "8000"
     networks:
-      proxy-network:
+      app:
         aliases:
           - metadata
   metadata-dev:
