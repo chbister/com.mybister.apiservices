@@ -162,10 +162,10 @@ services:
         aliases:
           - asr-large-link
 
-  diarization-detect:
+  diarization:
     build:
-      context: ./diarization-detect-service
-    image: diarization-detect-service:local
+      context: ./diarization-service
+    image: diarization-service:local
     expose:
       - "8000"
     environment:
@@ -182,8 +182,8 @@ services:
         aliases:
           - diarization-link
 
-  diarization-detect-dev:
-    image: diarization-detect-service:local
+  diarization-dev:
+    image: diarization-service:local
     expose:
       - "8000"
     environment:
@@ -194,7 +194,7 @@ services:
       DIARIZATION_MIN_SPEAKER_SEC: 10
       DIARIZATION_MIN_SPEAKER_SHARE: 0.15
     volumes:
-      - ./diarization-detect-service/app:/srv/app:rw
+      - ./diarization-service/app:/srv/app:rw
       - hf_cache:/root/.cache/huggingface
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
@@ -210,19 +210,20 @@ services:
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - asr-tiny
-      - asr-small
-      - asr-medium
       - asr-large
+      - asr-medium
+      - asr-small
+      - asr-tiny
       - barcode
-      - sentiment
+      - diarization
       - emotion
-      - emotion-nuance
-      - emotion-vibe
-      - emotion-state
       - emotion-hate
-      - processor
+      - emotion-nuance
+      - emotion-state
+      - emotion-vibe
       - metadata
+      - processor
+      - sentiment
     profiles: [ "prod" ]
     networks:
       - dev-shared-network
@@ -234,20 +235,21 @@ services:
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - asr-tiny-dev
-      - asr-small-dev
-      - asr-medium-dev
       - asr-large-dev
+      - asr-medium-dev
+      - asr-small-dev
+      - asr-tiny-dev
       - barcode-dev
-      - sentiment-dev
-      - emotion-dev
-      - emotion-nuance-dev
-      - emotion-vibe-dev
-      - emotion-state-dev
-      - emotion-hate-dev
-      - processor-dev
       - callback-tester-dev
+      - diarization-dev
+      - emotion-dev
+      - emotion-hate-dev
+      - emotion-nuance-dev
+      - emotion-state-dev
+      - emotion-vibe-dev
       - metadata-dev
+      - processor-dev
+      - sentiment-dev
     profiles: [ "dev" ]
     networks:
       - dev-shared-network
