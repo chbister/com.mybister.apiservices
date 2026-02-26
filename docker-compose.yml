@@ -266,7 +266,7 @@ services:
     networks:
       app:
         aliases:
-          - barcode
+          - barcode-link
 
   barcode-dev:
     image: barcode-service:local
@@ -281,7 +281,7 @@ services:
     networks:
       app:
         aliases:
-          - barcode
+          - barcode-link
 
   sentiment:
     build:
@@ -299,7 +299,7 @@ services:
     networks:
       app:
         aliases:
-          - sentiment
+          - sentiment-link
 
   sentiment-dev:
     image: sentiment-service:local
@@ -316,7 +316,7 @@ services:
     networks:
       app:
         aliases:
-          - sentiment
+          - sentiment-link
 
   emotion:
     build:
@@ -333,7 +333,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion
+          - emotion-link
 
   emotion-dev:
     image: emotion-service:local
@@ -350,7 +350,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion
+          - emotion-link
 
   # --- EMOTION MODEL VARIANTS (Profile: prod) ---
   emotion-nuance:
@@ -366,7 +366,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-nuance
+          - emotion-nuance-link
 
   emotion-vibe:
     image: emotion-service:local
@@ -381,7 +381,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-vibe
+          - emotion-vibe-link
 
   emotion-state:
     image: emotion-service:local
@@ -396,7 +396,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-state
+          - emotion-state-link
 
   # --- EMOTION MODEL VARIANTS (Profile: dev) ---
   emotion-nuance-dev:
@@ -414,7 +414,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-nuance
+          - emotion-nuance-link
 
   emotion-vibe-dev:
     image: emotion-service:local
@@ -431,7 +431,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-vibe
+          - emotion-vibe-link
 
   emotion-state-dev:
     image: emotion-service:local
@@ -450,7 +450,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-state
+          - emotion-state-link
 
   emotion-hate:
     build:
@@ -467,7 +467,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-hate
+          - emotion-hate-link
 
   emotion-hate-dev:
     image: emotion-service:local
@@ -484,7 +484,7 @@ services:
     networks:
       app:
         aliases:
-          - emotion-hate
+          - emotion-hate-link
 
   processor:
     build:
@@ -496,7 +496,7 @@ services:
     networks:
       app:
         aliases:
-          - processor
+          - processor-link
 
   processor-dev:
     image: processor-service:local
@@ -511,7 +511,7 @@ services:
     networks:
       app:
         aliases:
-          - processor
+          - processor-link
 
   callback-tester:
     build:
@@ -525,7 +525,7 @@ services:
     networks:
       app:
         aliases:
-          - callback-tester
+          - callback-tester-link
 
   callback-tester-dev:
     image: callback-tester:local
@@ -541,7 +541,7 @@ services:
     networks:
       app:
         aliases:
-          - callback-tester
+          - callback-tester-link
 
   metadata:
     build:
@@ -557,7 +557,7 @@ services:
     networks:
       app:
         aliases:
-          - metadata
+          - metadata-link
   metadata-dev:
     image: metadata:local
     environment:
@@ -573,7 +573,7 @@ services:
     networks:
       app:
         aliases:
-          - metadata
+          - metadata-link
 
 volumes:
   hf_cache:
