@@ -1,17 +1,27 @@
+x-common-env: &common-env
+  HF_TOKEN: "${HF_TOKEN:-}"
+  CALLBACK_AUTH_SECRET: "${CALLBACK_AUTH_SECRET:-}"
+  REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+  SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+
+x-asr-env: &asr-env
+  <<: *common-env
+  ASR_COMPUTE_TYPE: "int8"
+  ASR_DEFAULT_LANGUAGE: "auto"
+  ASR_ASYNC_THRESHOLD: "300"
+  ASR_JOBS_DIR: "/srv/jobs"
+  UVICORN_HOST: "0.0.0.0"
+  UVICORN_PORT: "8000"
+  UVICORN_WORKERS: "2"
+  OMP_NUM_THREADS: "1"
+  CT2_NUM_THREADS: "1"
+
 x-asr-base: &asr-base
   build:
     context: ./asr-service
   image: asr-service:local
   environment:
-    ASR_COMPUTE_TYPE: "int8"
-    ASR_DEFAULT_LANGUAGE: "auto"
-    ASR_ASYNC_THRESHOLD: "300"
-    ASR_JOBS_DIR: "/srv/jobs"
-    UVICORN_HOST: "0.0.0.0"
-    UVICORN_PORT: "8000"
-    UVICORN_WORKERS: "2"
-    OMP_NUM_THREADS: "1"
-    CT2_NUM_THREADS: "1"
+    <<: *asr-env
   volumes:
     - hf_cache:/root/.cache/huggingface
     - ct2_cache:/root/.cache/ctranslate2
@@ -24,11 +34,12 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "tiny"
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-tiny-link
 
@@ -37,11 +48,12 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "small"
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-small-link
 
@@ -50,11 +62,12 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "medium"
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-medium-link
 
@@ -63,11 +76,12 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "large-v3"
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-large-link
 
@@ -77,6 +91,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "tiny"
       UVICORN_RELOAD: "1"
       UVICORN_LOG_LEVEL: "debug"
@@ -86,7 +101,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-tiny-link
 
@@ -95,6 +110,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "small"
       UVICORN_RELOAD: "1"
       UVICORN_LOG_LEVEL: "debug"
@@ -104,7 +120,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-small-link
 
@@ -113,6 +129,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "medium"
       UVICORN_RELOAD: "1"
       UVICORN_LOG_LEVEL: "debug"
@@ -122,7 +139,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-medium-link
 
@@ -131,6 +148,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *asr-env
       ASR_MODEL_SIZE: "large-v3"
       UVICORN_RELOAD: "1"
       UVICORN_LOG_LEVEL: "debug"
@@ -140,9 +158,50 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - asr-large-link
+
+  diarization-detect:
+    build:
+      context: ./diarization-detect-service
+    image: diarization-detect-service:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      DIARIZATION_MAX_ANALYZE_SEC: 120
+      DIARIZATION_MIN_SPEAKER_SEC: 10
+      DIARIZATION_MIN_SPEAKER_SHARE: 0.15
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+      - ct2_cache:/root/.cache/ctranslate2
+    profiles: [ "prod" ]
+    networks:
+      dev-shared-network:
+        aliases:
+          - diarization-link
+
+  diarization-detect-dev:
+    image: diarization-detect-service:local
+    expose:
+      - "8000"
+    environment:
+      <<: *asr-env
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
+      DIARIZATION_MAX_ANALYZE_SEC: 120
+      DIARIZATION_MIN_SPEAKER_SEC: 10
+      DIARIZATION_MIN_SPEAKER_SHARE: 0.15
+    volumes:
+      - ./diarization-detect-service/app:/srv/app:rw
+      - hf_cache:/root/.cache/huggingface
+      - ct2_cache:/root/.cache/ctranslate2
+    profiles: [ "dev" ]
+    networks:
+      dev-shared-network:
+        aliases:
+          - diarization-link
 
   gateway:
     image: nginx:alpine
@@ -161,11 +220,12 @@ services:
       - emotion-nuance
       - emotion-vibe
       - emotion-state
+      - emotion-hate
       - processor
       - metadata
     profiles: [ "prod" ]
     networks:
-      - proxy-network
+      - dev-shared-network
 
   gateway-dev:
     image: nginx:alpine
@@ -184,11 +244,13 @@ services:
       - emotion-nuance-dev
       - emotion-vibe-dev
       - emotion-state-dev
+      - emotion-hate-dev
       - processor-dev
       - callback-tester-dev
+      - metadata-dev
     profiles: [ "dev" ]
     networks:
-      - proxy-network
+      - dev-shared-network
 
   barcode:
     build:
@@ -198,7 +260,7 @@ services:
       - "8000"
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - barcode
 
@@ -209,10 +271,11 @@ services:
     volumes:
       - ./barcode-service/app:/srv/app:rw
     environment:
+      <<: *common-env
       UVICORN_RELOAD: "1"
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - barcode
 
@@ -223,13 +286,14 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       SENTIMENT_MODEL_ID: "cardiffnlp/twitter-xlm-roberta-base-sentiment"
     restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - sentiment
 
@@ -238,6 +302,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       SENTIMENT_MODEL_ID: "cardiffnlp/twitter-xlm-roberta-base-sentiment"
       UVICORN_RELOAD: "1"
     volumes:
@@ -245,7 +310,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - sentiment
 
@@ -256,12 +321,13 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       EMOTION_MODEL_ID: "lxyuan/distilbert-base-multilingual-cased-sentiments-student"
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion
 
@@ -270,6 +336,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       EMOTION_MODEL_ID: "lxyuan/distilbert-base-multilingual-cased-sentiments-student"
       UVICORN_RELOAD: "1"
     volumes:
@@ -277,7 +344,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion
 
@@ -287,12 +354,13 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       EMOTION_MODEL_ID: "SamLowe/roberta-base-go_emotions"
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion-nuance
 
@@ -301,12 +369,13 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       EMOTION_MODEL_ID: "nlptown/bert-base-multilingual-uncased-sentiment" # Excellent for vibe/stars across languages
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion-vibe
 
@@ -315,12 +384,13 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       EMOTION_MODEL_ID: "j-hartmann/emotion-english-distilroberta-base" # 7 core emotions
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion-state
 
@@ -330,6 +400,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       EMOTION_MODEL_ID: "SamLowe/roberta-base-go_emotions"
       UVICORN_RELOAD: "1"
     volumes:
@@ -337,7 +408,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion-nuance
 
@@ -346,6 +417,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       EMOTION_MODEL_ID: "nlptown/bert-base-multilingual-uncased-sentiment"
       UVICORN_RELOAD: "1"
     volumes:
@@ -353,7 +425,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion-vibe
 
@@ -362,16 +434,53 @@ services:
     expose:
       - "8000"
     environment:
-      EMOTION_MODEL_ID: "j-hartmann/emotion-english-distilroberta-base"
+      <<: *common-env
+      #EMOTION_MODEL_ID: "j-hartmann/emotion-english-distilroberta-base"
+      #EMOTION_MODEL_ID: "j-hartmann/emotion-multilingual-distilroberta-base"
+      EMOTION_MODEL_ID: "ChrisLalk/German-Emotions"
       UVICORN_RELOAD: "1"
     volumes:
       - ./emotion-service/app:/srv/app:rw
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - emotion-state
+
+  emotion-hate:
+    build:
+      context: ./emotion-service
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      EMOTION_MODEL_ID: "cardiffnlp/twitter-roberta-base-hate"
+    volumes:
+      - hf_cache:/root/.cache
+    profiles: [ "prod" ]
+    networks:
+      dev-shared-network:
+        aliases:
+          - emotion-hate
+
+  emotion-hate-dev:
+    image: emotion-service:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      EMOTION_MODEL_ID: "cardiffnlp/twitter-roberta-base-hate"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./emotion-service/app:/srv/app:rw
+      - hf_cache:/root/.cache
+    profiles: [ "dev" ]
+    networks:
+      dev-shared-network:
+        aliases:
+          - emotion-hate
 
   processor:
     build:
@@ -381,7 +490,7 @@ services:
       - "8000"
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - processor
 
@@ -392,10 +501,11 @@ services:
     volumes:
       - ./processor-service/app:/srv/app:rw
     environment:
+      <<: *common-env
       UVICORN_RELOAD: "1"
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - processor
 
@@ -409,7 +519,7 @@ services:
       - callback_data:/srv/callbacks
     profiles: [ "prod" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - callback-tester
 
@@ -421,25 +531,43 @@ services:
       - ./callback-tester/app:/srv/app:rw
       - callback_data:/srv/callbacks
     environment:
+      <<: *common-env
       UVICORN_RELOAD: "1"
     profiles: [ "dev" ]
     networks:
-      proxy-network:
+      dev-shared-network:
         aliases:
           - callback-tester
 
   metadata:
-    build: 
+    build:
       context: ./metadata-service
     image: metadata:local
     environment:
-      - MAX_DOWNLOAD_BYTES=209715200
-      - DOWNLOAD_TIMEOUT_S=30
+      <<: *common-env
+      MAX_DOWNLOAD_BYTES: 2097152000
+      DOWNLOAD_TIMEOUT_S: 30
     profiles: [ "prod" ]
     expose:
       - "8000"
     networks:
       proxy-network:
+        aliases:
+          - metadata
+  metadata-dev:
+    image: metadata:local
+    environment:
+      <<: *common-env
+      MAX_DOWNLOAD_BYTES: 2097152000
+      DOWNLOAD_TIMEOUT_S: 30
+      UVICORN_RELOAD: 1
+    profiles: [ "dev" ]
+    expose:
+      - "8000"
+    volumes:
+      - ./metadata-service/app:/srv/app:rw
+    networks:
+      dev-shared-network:
         aliases:
           - metadata
 
@@ -449,5 +577,5 @@ volumes:
   asr_jobs:
   callback_data:
 networks:
-  proxy-network:
+  dev-shared-network:
     external: true
