@@ -28,7 +28,7 @@ Supports `tiny`, `small`, `medium`, and `large-v3` models.
 - **Features**: 
     - `file_url` parameter for remote downloads.
     - **Async Mode**: Automatically switches to background processing for files > 5 minutes.
-    - **Push Method**: Optional `callback_url` for webhooks.
+    - **Push Method**: Optional `callback_url` for webhooks. Supports `CALLBACK_AUTH_SECRET` for Bearer token authentication.
 - **Status/Download**: `GET /asr-<model>/v1/asr/status/{job_id}` and `GET /asr-<model>/v1/asr/download/{job_id}`.
 
 ### 3. Analysis Services (Multilingual)
