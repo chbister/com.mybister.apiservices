@@ -49,6 +49,8 @@ class BarcodeResponse(BaseModel):
     results: List[BarcodeResult]
     count: int
     hostname: str
+    file_name: Optional[str] = None
+    file_url: Optional[str] = None
 
 @app.get("/health")
 def health():
@@ -95,7 +97,9 @@ async def scan_barcode(
         return BarcodeResponse(
             results=results,
             count=len(results),
-            hostname=socket.gethostname()
+            hostname=socket.gethostname(),
+            file_name=file.filename if file else None,
+            file_url=file_url
         )
         
     except HTTPException:
