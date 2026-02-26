@@ -1,0 +1,26 @@
+meta {
+  name: emotion state health
+  type: http
+  seq: 16
+}
+
+get {
+  url: https://gateway-dev.commybisterapiservices.orb.local/emotion-state/health
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "text": "I am happy!"
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

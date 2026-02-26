@@ -1,0 +1,22 @@
+meta {
+  name: asr-callback
+  type: http
+  seq: 19
+}
+
+post {
+  url: http://localhost:8000/api/asr-callback/01kh6g0m3j7ne553nj810dwssj
+  body: none
+  auth: apikey
+}
+
+auth:apikey {
+  key: X-Callback-Token
+  value: foobar
+  placement: header
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

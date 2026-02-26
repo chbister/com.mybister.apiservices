@@ -1,11 +1,11 @@
 meta {
-  name: callback tester
+  name: callback tester list
   type: http
   seq: 18
 }
 
-post {
-  url: {{baseUrl}}/callback-tester/listen
+get {
+  url: {{baseUrl}}/callback-tester/list
   body: json
   auth: inherit
 }

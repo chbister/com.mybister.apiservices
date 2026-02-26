@@ -1,0 +1,32 @@
+meta {
+  name: asr tiny
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/asr-tiny/v1/asr
+  body: multipartForm
+  auth: inherit
+}
+
+headers {
+  Content-Type: multipart/form-data
+}
+
+body:multipart-form {
+  language: auto
+  timestamps: true
+  force_async: true
+  file_url: https://minio.comitsforfinnapps.orb.local/timeline-bucket/1/v12044gd0000cfnum8jc77ubr076n7eg.mov?X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=minioadmin%2F20260211%2Feu-central-1%2Fs3%2Faws4_request&X-Amz-Date=20260211T173605Z&X-Amz-SignedHeaders=host&X-Amz-Expires=86400&X-Amz-Signature=731c6eb2ce9f4403e0a443faf700ace44edba6438f74671867d64bec55165e37
+  callback_url: http://host.docker.internal:8000/api/asr-callback/01kh6wcgk8yms6ymded6te45yr
+  ~file_url: https://garrio.de/wp-content/uploads/2025/03/garrioCOM-Werbefilm-Launch.mp4
+  ~file: @file(/Users/christianbister/Downloads/Walkthrough IP26.m4a)
+  ~callback_url: http://callback-tester-dev:8000/listen
+  ~callback_url: http://callback-tester:8000/listen
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

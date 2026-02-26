@@ -1,0 +1,16 @@
+meta {
+  name: metadata health
+  type: http
+  seq: 23
+}
+
+get {
+  url: https://gateway-dev.commybisterapiservices.orb.local/metadata/health
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
