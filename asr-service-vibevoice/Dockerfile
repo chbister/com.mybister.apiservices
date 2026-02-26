@@ -11,6 +11,25 @@ RUN pip install --no-cache-dir --upgrade pip
 
 # Repo holen & editable installieren (enthält demo/ scripts)
 RUN git clone --depth 1 https://github.com/microsoft/VibeVoice.git /srv/VibeVoice
+
+# Patch: torch.backends.xpu existiert nicht in allen torch builds
+RUN python - <<'PY'
+import pathlib, re
+p = pathlib.Path("/srv/VibeVoice/demo/vibevoice_asr_inference_from_file.py")
+s = p.read_text(encoding="utf-8")
+
+# Ersetze die xpu-Abfrage durch eine defensive Variante
+# Original (vereinfacht): torch.backends.xpu.is_available()
+s = s.replace(
+    'torch.backends.xpu.is_available()',
+    'hasattr(torch.backends, "xpu") and torch.backends.xpu.is_available()'
+)
+
+p.write_text(s, encoding="utf-8")
+print("Patched xpu backend check in", p)
+PY
+
+
 WORKDIR /srv/VibeVoice
 RUN pip install --no-cache-dir -e .
 
