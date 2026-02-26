@@ -14,6 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install ffmpeg for pydub and faster-whisper (mp3/m4a/ogg/webm etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    curl \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv

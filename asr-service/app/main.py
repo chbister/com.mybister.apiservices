@@ -30,6 +30,7 @@ COMPUTE_TYPE = os.getenv("ASR_COMPUTE_TYPE", "int8")
 DEFAULT_LANGUAGE = os.getenv("ASR_DEFAULT_LANGUAGE", "auto")
 ASYNC_THRESHOLD_SEC = int(os.getenv("ASR_ASYNC_THRESHOLD", "300"))
 JOBS_DIR = os.getenv("ASR_JOBS_DIR", "/srv/jobs")
+CALLBACK_AUTH_SECRET = os.getenv("CALLBACK_AUTH_SECRET")
 
 os.makedirs(JOBS_DIR, exist_ok=True)
 
@@ -40,7 +41,7 @@ executor = ProcessPoolExecutor(max_workers=1)
 
 app = FastAPI(title=APP_TITLE)
 
-def transcribe_worker(file_path: str, model_size: str, compute_type: str, language: Optional[str], vad_filter: bool, timestamps: bool):
+def transcribe_worker(file_path: str, model_size: str, compute_type: str, language: Optional[str], vad_filter: bool, timestamps: bool, file_name: Optional[str] = None, file_url: Optional[str] = None):
     """
     This function runs in a completely separate OS process.
     """
@@ -66,19 +67,25 @@ def transcribe_worker(file_path: str, model_size: str, compute_type: str, langua
 
         processing_time = time.time() - start_time
         
+        metadata = {
+            "model_size": model_size,
+            "compute_type": compute_type,
+            "device": "cpu",
+            "processing_time": round(processing_time, 3),
+            "hostname": socket.gethostname()
+        }
+        if file_name:
+            metadata["file_name"] = file_name
+        if file_url:
+            metadata["file_url"] = file_url
+
         return {
             "success": True,
             "result": {
                 "text": " ".join(full_text_parts).strip(),
                 "language": getattr(info, "language", None),
                 "segments": seg_list,
-                "metadata": {
-                    "model_size": model_size,
-                    "compute_type": compute_type,
-                    "device": "cpu",
-                    "processing_time": round(processing_time, 3),
-                    "hostname": socket.gethostname()
-                }
+                "metadata": metadata
             }
         }
     except Exception as e:
@@ -97,6 +104,8 @@ class AsrMetadata(BaseModel):
     device: str
     processing_time: float
     hostname: str
+    file_name: Optional[str] = None
+    file_url: Optional[str] = None
 
 
 class AsrResponse(BaseModel):
@@ -137,11 +146,11 @@ def get_job_data(job_id: str) -> Optional[Dict[str, Any]]:
         return json.load(f)
 
 
-async def run_async_job(job_id: str, file_path: str, lang: Optional[str], vad: bool, ts: bool, callback: Optional[str]):
+async def run_async_job(job_id: str, file_path: str, lang: Optional[str], vad: bool, ts: bool, callback: Optional[str], file_name: Optional[str] = None, file_url: Optional[str] = None):
     loop = asyncio.get_running_loop()
     try:
         # Offload to the separate process
-        future = executor.submit(transcribe_worker, file_path, MODEL_SIZE, COMPUTE_TYPE, lang, vad, ts)
+        future = executor.submit(transcribe_worker, file_path, MODEL_SIZE, COMPUTE_TYPE, lang, vad, ts, file_name, file_url)
         # Use run_in_executor to avoid blocking the event loop while waiting for the process result
         response = await loop.run_in_executor(None, future.result)
 
@@ -149,10 +158,34 @@ async def run_async_job(job_id: str, file_path: str, lang: Optional[str], vad: b
             save_job_result(job_id, response["result"], "completed")
             if callback:
                 try:
+                    headers = {}
+                    if CALLBACK_AUTH_SECRET:
+                        headers["Authorization"] = f"Bearer {CALLBACK_AUTH_SECRET}"
+                        logger.info("Sending callback with Authorization header")
+
+                    logger.info("Sending callback to %s", callback)
+                    logger.debug("Callback payload: %s", response)
+                        
                     async with httpx.AsyncClient() as client:
-                        await client.post(callback, json={"job_id": job_id, "status": "completed", "result": response["result"]})
+                        cb_response = None
+                        try:
+                            cb_response = await client.post(
+                                callback, 
+                                json={"job_id": job_id, "status": "completed", "result": response["result"]},
+                                headers=headers
+                            )
+                            cb_response.raise_for_status()
+                            logger.info("Callback response status: %s", cb_response.status_code)
+                            logger.debug("Callback response body: %s", cb_response.text)
+                        except httpx.HTTPStatusError as e:
+                            logger.error("Callback failed for job %s with status %s: %s", job_id, e.response.status_code, e.response.text)
+                        except Exception as e:
+                            if cb_response:
+                                logger.error("Callback failed for job %s: %s, Response: %s %s", job_id, e, cb_response.status_code, cb_response.text)
+                            else:
+                                logger.error("Callback failed for job %s: %s", job_id, e)
                 except Exception as e:
-                    logger.error("Callback failed for job %s: %s", job_id, e)
+                    logger.error("Callback logic failed for job %s: %s", job_id, e)
         else:
             save_job_result(job_id, {"error": response["error"]}, "failed")
             
@@ -174,9 +207,10 @@ async def asr(
     callback_url: Optional[str] = Form(None),
     force_async: bool = Form(False)
 ):
-    logger.info("ASR request received file=%s file_url=%s", 
+    logger.info("ASR request received file=%s file_url=%s",
                 file.filename if file else "None", 
                 file_url)
+    logger.info("ASR request received callback_url=%s force_async=%s", callback_url, force_async)
     
     if not file and not file_url:
         raise HTTPException(status_code=400, detail="Either 'file' or 'file_url' must be provided.")
@@ -225,18 +259,24 @@ async def asr(
             save_job_result(job_id, {}, "processing")
             
             # Fire and forget the background task
-            asyncio.create_task(run_async_job(job_id, temp_path, lang_val, vad_filter, timestamps, callback_url))
+            asyncio.create_task(run_async_job(job_id, temp_path, lang_val, vad_filter, timestamps, callback_url, 
+                                             file.filename if file else None, file_url))
             
-            return JSONResponse(status_code=202, content={
+            response_content = {
                 "job_id": job_id,
                 "status_url": f"/v1/asr/status/{job_id}",
                 "download_url": f"/v1/asr/download/{job_id}",
                 "message": "Job accepted. Processing in background."
-            })
+            }
+            if callback_url:
+                response_content["callback_url"] = callback_url
+                
+            return JSONResponse(status_code=202, content=response_content)
 
         # Sync path: Also offload to the separate process to keep this worker's event loop free
         loop = asyncio.get_running_loop()
-        future = executor.submit(transcribe_worker, temp_path, MODEL_SIZE, COMPUTE_TYPE, lang_val, vad_filter, timestamps)
+        future = executor.submit(transcribe_worker, temp_path, MODEL_SIZE, COMPUTE_TYPE, lang_val, vad_filter, timestamps,
+                                 file.filename if file else None, file_url)
         response = await loop.run_in_executor(None, future.result)
         
         if os.path.exists(temp_path):
@@ -245,12 +285,16 @@ async def asr(
         if not response["success"]:
             raise HTTPException(status_code=500, detail=response["error"])
             
-        return response["result"]
+        result = response["result"]
+        if callback_url:
+            result["callback_url"] = callback_url
+            
+        return result
 
     except Exception as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        logger.error("ASR endpoint failed: %s", e)
+        logger.error("ASR endpoint failed: %s, %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
