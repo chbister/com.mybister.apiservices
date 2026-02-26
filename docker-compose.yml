@@ -39,7 +39,7 @@ services:
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-tiny-link
 
@@ -53,7 +53,7 @@ services:
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-small-link
 
@@ -67,7 +67,7 @@ services:
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-medium-link
 
@@ -81,7 +81,7 @@ services:
       UVICORN_LOG_LEVEL: "info"
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-large-link
 
@@ -101,7 +101,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-tiny-link
 
@@ -120,7 +120,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-small-link
 
@@ -139,7 +139,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-medium-link
 
@@ -158,7 +158,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - asr-large-link
 
@@ -178,7 +178,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - diarization-link
 
@@ -199,7 +199,7 @@ services:
       - ct2_cache:/root/.cache/ctranslate2
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - diarization-link
 
@@ -226,7 +226,8 @@ services:
       - sentiment
     profiles: [ "prod" ]
     networks:
-      - dev-shared-network
+      - edge
+      - app
 
   gateway-dev:
     image: nginx:alpine
@@ -252,7 +253,8 @@ services:
       - sentiment-dev
     profiles: [ "dev" ]
     networks:
-      - dev-shared-network
+      - edge
+      - app
 
   barcode:
     build:
@@ -262,7 +264,7 @@ services:
       - "8000"
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - barcode
 
@@ -277,7 +279,7 @@ services:
       UVICORN_RELOAD: "1"
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - barcode
 
@@ -295,7 +297,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - sentiment
 
@@ -312,7 +314,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - sentiment
 
@@ -329,7 +331,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion
 
@@ -346,7 +348,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion
 
@@ -362,7 +364,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-nuance
 
@@ -377,7 +379,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-vibe
 
@@ -392,7 +394,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-state
 
@@ -410,7 +412,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-nuance
 
@@ -427,7 +429,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-vibe
 
@@ -446,7 +448,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-state
 
@@ -463,7 +465,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-hate
 
@@ -480,7 +482,7 @@ services:
       - hf_cache:/root/.cache
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - emotion-hate
 
@@ -492,7 +494,7 @@ services:
       - "8000"
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - processor
 
@@ -507,7 +509,7 @@ services:
       UVICORN_RELOAD: "1"
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - processor
 
@@ -521,7 +523,7 @@ services:
       - callback_data:/srv/callbacks
     profiles: [ "prod" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - callback-tester
 
@@ -537,7 +539,7 @@ services:
       UVICORN_RELOAD: "1"
     profiles: [ "dev" ]
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - callback-tester
 
@@ -569,7 +571,7 @@ services:
     volumes:
       - ./metadata-service/app:/srv/app:rw
     networks:
-      dev-shared-network:
+      app:
         aliases:
           - metadata
 
@@ -579,5 +581,8 @@ volumes:
   asr_jobs:
   callback_data:
 networks:
-  dev-shared-network:
+  edge:
     external: true
+    name: ${EDGE_NETWORK_NAME:-dev-shared-network}
+  app: # internal-to-this-compose network (bridge)
+    driver: bridge
