@@ -30,12 +30,12 @@ jobs:
 
           matrix=$(jq -c '
             {
-              service: [
+              include: [
                 .services
                 | to_entries[]
                 | select(.value.build != null)
                 | {
-                    name: .key,
+                    service: .key,
                     context: (
                       if (.value.build | type) == "string"
                       then .value.build
@@ -47,9 +47,6 @@ jobs:
                       then .value.build.dockerfile
                       else "Dockerfile"
                       end
-                    ),
-                    image: (
-                      .value.image // ""
                     )
                   }
               ]
@@ -85,14 +82,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Set image tag
         id: meta
         run: |
-          if [ -n "${{ matrix.service.image }}" ]; then
-            IMAGE_NAME="${{ matrix.service.image }}"
-          else
-            IMAGE_NAME="${{ env.REGISTRY }}/${{ env.GITHUB_OWNER }}/${{ matrix.service.name }}"
-          fi
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.GITHUB_OWNER }}/${{ matrix.service }}"
 
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             IMAGE_TAG="${IMAGE_NAME}:latest"
@@ -107,10 +100,12 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.service.context }}
-          file: ${{ matrix.service.context }}/${{ matrix.service.dockerfile }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/${{ matrix.dockerfile }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
