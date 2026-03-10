@@ -14,7 +14,7 @@ env:
   GITHUB_OWNER: ${{ github.repository_owner }}
 
 jobs:
-  parse-services:
+  parse-builds:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -23,45 +23,96 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Parse docker-compose.yml for prod services with build context
+      - name: Parse unique prod builds from docker-compose.yml
         id: set-matrix
         run: |
           docker compose --profile prod config --format json > compose.json
 
-          matrix=$(jq -c '
-            {
-              include: [
-                .services
-                | to_entries[]
-                | select(.value.build != null)
-                | {
-                    service: .key,
-                    context: (
-                      if (.value.build | type) == "string"
-                      then .value.build
-                      else .value.build.context
-                      end
-                    ),
-                    dockerfile: (
-                      if (.value.build | type) == "object" and .value.build.dockerfile != null
-                      then .value.build.dockerfile
-                      else "Dockerfile"
-                      end
+          matrix=$(
+            jq -c '
+              {
+                include: (
+                  .services
+                  | to_entries
+                  | map(
+                      select(.value.build != null)
+                      | {
+                          service: .key,
+
+                          context:
+                            (if (.value.build | type) == "string"
+                             then .value.build
+                             else .value.build.context
+                             end),
+
+                          dockerfile:
+                            (if (.value.build | type) == "object" and .value.build.dockerfile != null
+                             then .value.build.dockerfile
+                             else "Dockerfile"
+                             end),
+
+                          target:
+                            (if (.value.build | type) == "object" and .value.build.target != null
+                             then .value.build.target
+                             else ""
+                             end),
+
+                          image:
+                            (.value.image // ""),
+
+                          unique_key:
+                            (
+                              (if (.value.build | type) == "string"
+                               then .value.build
+                               else .value.build.context
+                               end)
+                              + "|"
+                              + (if (.value.build | type) == "object" and .value.build.dockerfile != null
+                                 then .value.build.dockerfile
+                                 else "Dockerfile"
+                                 end)
+                              + "|"
+                              + (if (.value.build | type) == "object" and .value.build.target != null
+                                 then .value.build.target
+                                 else ""
+                                 end)
+                            )
+                        }
                     )
-                  }
-              ]
-            }
-          ' compose.json)
+                  | unique_by(.unique_key)
+                  | map(
+                      . + {
+                        image_name:
+                          (
+                            if (.image | length) > 0
+                            then
+                              (
+                                .image
+                                | sub("^.*/"; "")
+                                | sub(":[^:]+$"; "")
+                              )
+                            else .service
+                            end
+                          )
+                      }
+                    )
+                )
+              }
+            ' compose.json
+          )
 
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
+      - name: Show build matrix
+        run: echo '${{ steps.set-matrix.outputs.matrix }}' | jq .
+
   build-and-push:
-    needs: parse-services
+    needs: parse-builds
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.parse-services.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.parse-builds.outputs.matrix) }}
 
     permissions:
       contents: read
@@ -82,26 +133,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set image tag
+      - name: Compute tags
         id: meta
+        shell: bash
         run: |
-          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.GITHUB_OWNER }}/${{ matrix.service }}"
+          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.GITHUB_OWNER }}/${{ matrix.image_name }}"
 
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            IMAGE_TAG="${IMAGE_NAME}:latest"
+            IMAGE_TAG="$IMAGE_NAME:latest"
           else
             SAFE_REF=$(echo "${{ github.ref_name }}" | tr '/ ' '-')
-            IMAGE_TAG="${IMAGE_NAME}:${SAFE_REF}"
+            IMAGE_TAG="$IMAGE_NAME:$SAFE_REF"
           fi
 
-          echo "image=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
-          echo "tags=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "tags=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/${{ matrix.dockerfile }}
+          target: ${{ matrix.target != '' && matrix.target || null }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
