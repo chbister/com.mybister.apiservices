@@ -11,7 +11,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  GITHUB_OWNER: ${{ github.repository_owner }}
 
 jobs:
   parse-builds:
@@ -25,6 +24,7 @@ jobs:
 
       - name: Parse unique prod builds from docker-compose.yml
         id: set-matrix
+        shell: bash
         run: |
           docker compose --profile prod config --format json > compose.json
 
@@ -103,9 +103,6 @@ jobs:
 
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
-      - name: Show build matrix
-        run: echo '${{ steps.set-matrix.outputs.matrix }}' | jq .
-
   build-and-push:
     needs: parse-builds
     runs-on: ubuntu-latest
@@ -125,37 +122,65 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Decide whether to push
+        id: pushcheck
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: steps.pushcheck.outputs.push == 'true'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute tags
+      - name: Compute image name and tags
         id: meta
         shell: bash
         run: |
-          IMAGE_NAME="${{ env.REGISTRY }}/${{ env.GITHUB_OWNER }}/${{ matrix.image_name }}"
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE=$(echo "${{ matrix.image_name }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME="ghcr.io/${OWNER}/${IMAGE}"
 
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            IMAGE_TAG="$IMAGE_NAME:latest"
-          else
-            SAFE_REF=$(echo "${{ github.ref_name }}" | tr '/ ' '-')
-            IMAGE_TAG="$IMAGE_NAME:$SAFE_REF"
+          TAGS="${IMAGE_NAME}:${{ github.sha }}"
+
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            TAGS="${TAGS},${IMAGE_NAME}:latest"
           fi
 
           echo "image=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
-          echo "tags=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
+        if: matrix.target == ''
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/${{ matrix.dockerfile }}
-          target: ${{ matrix.target != '' && matrix.target || null }}
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: ${{ steps.pushcheck.outputs.push == 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Docker image (with target)
+        if: matrix.target != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: ${{ steps.pushcheck.outputs.push == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
