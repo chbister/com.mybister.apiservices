@@ -21,15 +21,51 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          json: true
+          escape_json: false
 
       - name: Parse image-builder services from docker-compose.yml
         id: set-matrix
         shell: bash
         run: |
+          # Use docker compose config to get the services and their contexts.
+          # We'll then use jq to filter based on changed files.
           docker compose --profile prod config --format json > compose.json
 
+          # Define the changed files as a JSON array.
+          # For workflow_dispatch or if critical files changed, we might want to build everything.
+          # tj-actions/changed-files output is already a JSON array.
+          CHANGED_FILES='${{ steps.changed-files.outputs.all_changed_files }}'
+          EVENT_NAME="${{ github.event_name }}"
+          ROOT_DIR=$(pwd)
+          
+          # If it's workflow_dispatch, we treat all files as changed (effectively build all).
+          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
+            # We can leave CHANGED_FILES as empty to signal build all, or fill it with something.
+            # But simpler logic: if it's workflow_dispatch, we skip filtering.
+            echo "Workflow dispatch triggered - building all services."
+            CHANGED_FILES="[]"
+          fi
+
           matrix=$(
-            jq -c '
+            jq -c --argjson changed_files "$CHANGED_FILES" --arg event "$EVENT_NAME" --arg root "$ROOT_DIR" '
+              # Normalize contexts to be relative to project root
+              # docker compose config --format json usually returns absolute paths.
+              
+              # First, check if any critical file changed (docker-compose.yml or this workflow)
+              # If so, we might want to build all. 
+              (
+                ($event == "workflow_dispatch") or
+                ($changed_files | any(. == "docker-compose.yml" or startswith(".github/workflows/")))
+              ) as $build_all
+              |
               {
                 include: (
                   .services
@@ -39,6 +75,7 @@ jobs:
                       | {
                           service: .key,
 
+                          # Resolve context to be relative to the project root
                           context:
                             (if (.value.build | type) == "string"
                              then .value.build
@@ -82,6 +119,10 @@ jobs:
                   | unique_by(.unique_key)
                   | map(
                       . + {
+                        # We need a relative version of the context for file matching
+                        # Strip the root prefix from the absolute context path
+                        rel_context: (.context | sub("^" + $root + "/"; "") | sub("^./"; "") | sub("/$"; "")),
+                        
                         image_name:
                           (
                             if (.image | length) > 0
@@ -95,6 +136,15 @@ jobs:
                             end
                           )
                       }
+                    )
+                  | map(
+                      select(
+                        $build_all or
+                        (
+                          .rel_context as $ctx
+                          | $changed_files | any(startswith($ctx + "/"))
+                        )
+                      )
                     )
                 )
               }
