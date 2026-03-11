@@ -17,7 +17,7 @@ x-asr-env: &asr-env
   CT2_NUM_THREADS: "1"
 
 x-asr-base: &asr-base
-  image: ghcr.io/christianbister/asr:latest
+  image: ghcr.io/chbister/asr:latest
   environment:
     <<: *asr-env
   volumes:
@@ -30,7 +30,7 @@ services:
   asr-image-builder:
     build:
       context: ./asr-service
-    image: ghcr.io/christianbister/asr:latest
+    image: ghcr.io/chbister/asr:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service asr-image-builder is only for building the image"]
     restart: "no"
@@ -181,7 +181,7 @@ services:
           - asr-large-link
 
   diarization:
-    image: ghcr.io/christianbister/diarization:latest
+    image: ghcr.io/chbister/diarization:latest
     expose:
       - "8000"
     environment:
@@ -201,7 +201,7 @@ services:
   diarization-image-builder:
     build:
       context: ./diarization-service
-    image: ghcr.io/christianbister/diarization:latest
+    image: ghcr.io/chbister/diarization:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service diarization-image-builder is only for building the image"]
     restart: "no"
@@ -285,7 +285,7 @@ services:
       - app
 
   barcode:
-    image: ghcr.io/christianbister/barcode:latest
+    image: ghcr.io/chbister/barcode:latest
     expose:
       - "8000"
     profiles: [ "prod" ]
@@ -297,7 +297,7 @@ services:
   barcode-image-builder:
     build:
       context: ./barcode-service
-    image: ghcr.io/christianbister/barcode:latest
+    image: ghcr.io/chbister/barcode:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service barcode-image-builder is only for building the image"]
     restart: "no"
@@ -320,7 +320,7 @@ services:
           - barcode-link
 
   sentiment:
-    image: ghcr.io/christianbister/sentiment:latest
+    image: ghcr.io/chbister/sentiment:latest
     expose:
       - "8000"
     environment:
@@ -338,7 +338,7 @@ services:
   sentiment-image-builder:
     build:
       context: ./sentiment-service
-    image: ghcr.io/christianbister/sentiment:latest
+    image: ghcr.io/chbister/sentiment:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service sentiment-image-builder is only for building the image"]
     restart: "no"
@@ -363,7 +363,7 @@ services:
           - sentiment-link
 
   ner:
-    image: ghcr.io/christianbister/ner:latest
+    image: ghcr.io/chbister/ner:latest
     expose:
       - "8000"
     environment:
@@ -381,7 +381,7 @@ services:
   ner-image-builder:
     build:
       context: ./ner-service
-    image: ghcr.io/christianbister/ner:latest
+    image: ghcr.io/chbister/ner:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service ner-image-builder is only for building the image"]
     restart: "no"
@@ -406,7 +406,7 @@ services:
           - ner-link
 
   emotion:
-    image: ghcr.io/christianbister/emotion:latest
+    image: ghcr.io/chbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -423,7 +423,7 @@ services:
   emotion-image-builder:
     build:
       context: ./emotion-service
-    image: ghcr.io/christianbister/emotion:latest
+    image: ghcr.io/chbister/emotion:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service emotion-image-builder is only for building the image"]
     restart: "no"
@@ -447,7 +447,7 @@ services:
 
   # --- EMOTION MODEL VARIANTS (Profile: prod) ---
   emotion-nuance:
-    image: ghcr.io/christianbister/emotion:latest
+    image: ghcr.io/chbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -462,7 +462,7 @@ services:
           - emotion-nuance-link
 
   emotion-vibe:
-    image: ghcr.io/christianbister/emotion:latest
+    image: ghcr.io/chbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -477,7 +477,7 @@ services:
           - emotion-vibe-link
 
   emotion-state:
-    image: ghcr.io/christianbister/emotion:latest
+    image: ghcr.io/chbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -552,7 +552,7 @@ services:
           - emotion-state-link
 
   emotion-hate:
-    image: ghcr.io/christianbister/emotion:latest
+    image: ghcr.io/chbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -586,7 +586,7 @@ services:
           - emotion-hate-link
 
   processor:
-    image: ghcr.io/christianbister/processor:latest
+    image: ghcr.io/chbister/processor:latest
     expose:
       - "8000"
     profiles: [ "prod" ]
@@ -598,7 +598,7 @@ services:
   processor-image-builder:
     build:
       context: ./processor-service
-    image: ghcr.io/christianbister/processor:latest
+    image: ghcr.io/chbister/processor:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service processor-image-builder is only for building the image"]
     restart: "no"
@@ -621,7 +621,7 @@ services:
           - processor-link
 
   callback-tester:
-    image: ghcr.io/christianbister/callback-tester:latest
+    image: ghcr.io/chbister/callback-tester:latest
     expose:
       - "8000"
     volumes:
@@ -635,7 +635,7 @@ services:
   callback-tester-image-builder:
     build:
       context: ./callback-tester
-    image: ghcr.io/christianbister/callback-tester:latest
+    image: ghcr.io/chbister/callback-tester:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service callback-tester-image-builder is only for building the image"]
     restart: "no"
@@ -659,7 +659,7 @@ services:
           - callback-tester-link
 
   metadata:
-    image: ghcr.io/christianbister/metadata:latest
+    image: ghcr.io/chbister/metadata:latest
     environment:
       <<: *common-env
       MAX_DOWNLOAD_BYTES: 2097152000
@@ -675,7 +675,7 @@ services:
   metadata-image-builder:
     build:
       context: ./metadata-service
-    image: ghcr.io/christianbister/metadata:latest
+    image: ghcr.io/chbister/metadata:latest
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service metadata-image-builder is only for building the image"]
     restart: "no"
