@@ -26,6 +26,7 @@ EMOTION_BASE_URL = os.getenv("EMOTION_BASE_URL", "http://emotion:8000/v1/emotion
 EMOTION_NUANCE_URL = os.getenv("EMOTION_NUANCE_URL", "http://emotion-nuance:8000/v1/emotion")
 EMOTION_VIBE_URL = os.getenv("EMOTION_VIBE_URL", "http://emotion-vibe:8000/v1/emotion")
 EMOTION_STATE_URL = os.getenv("EMOTION_STATE_URL", "http://emotion-state:8000/v1/emotion")
+NER_URL = os.getenv("NER_URL", "http://ner:8000/v1/ner")
 
 class SegmentIn(BaseModel):
     start: float
@@ -53,7 +54,8 @@ async def analyze_text(client: httpx.AsyncClient, text: str) -> Dict[str, Any]:
             "emotion_base": None,
             "emotion_nuance": None,
             "emotion_vibe": None,
-            "emotion_state": None
+            "emotion_state": None,
+            "ner": None
         }
     
     # Define all parallel tasks
@@ -63,12 +65,13 @@ async def analyze_text(client: httpx.AsyncClient, text: str) -> Dict[str, Any]:
         client.post(EMOTION_NUANCE_URL, json={"text": text}, timeout=10.0),
         client.post(EMOTION_VIBE_URL, json={"text": text}, timeout=10.0),
         client.post(EMOTION_STATE_URL, json={"text": text}, timeout=10.0),
+        client.post(NER_URL, json={"text": text}, timeout=10.0),
     ]
     
     # Run all in parallel
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
-    keys = ["sentiment", "emotion_base", "emotion_nuance", "emotion_vibe", "emotion_state"]
+    keys = ["sentiment", "emotion_base", "emotion_nuance", "emotion_vibe", "emotion_state", "ner"]
     output = {}
     
     for i, key in enumerate(keys):
@@ -106,7 +109,7 @@ async def process_asr_result(asr_result: AsrResultIn):
         # Simple aggregation logic
         # We aggregate all valid analysis types
         aggregated_analysis = {}
-        keys = ["sentiment", "emotion_base", "emotion_nuance", "emotion_vibe", "emotion_state"]
+        keys = ["sentiment", "emotion_base", "emotion_nuance", "emotion_vibe", "emotion_state", "ner"]
         
         for key in keys:
             valid_results = [s[key] for s in segment_analyses if s.get(key)]

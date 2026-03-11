@@ -22,7 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Parse unique prod builds from docker-compose.yml
+      - name: Parse image-builder services from docker-compose.yml
         id: set-matrix
         shell: bash
         run: |
@@ -35,7 +35,7 @@ jobs:
                   .services
                   | to_entries
                   | map(
-                      select(.value.build != null)
+                      select(.key | endswith("-image-builder"))
                       | {
                           service: .key,
 

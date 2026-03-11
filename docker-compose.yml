@@ -17,9 +17,7 @@ x-asr-env: &asr-env
   CT2_NUM_THREADS: "1"
 
 x-asr-base: &asr-base
-  build:
-    context: ./asr-service
-  image: asr-service:local
+  image: ghcr.io/christianbister/asr:latest
   environment:
     <<: *asr-env
   volumes:
@@ -29,6 +27,14 @@ x-asr-base: &asr-base
 
 services:
   # --- PRODUCTION SERVICES (Profile: prod) ---
+  asr-image-builder:
+    build:
+      context: ./asr-service
+    image: ghcr.io/christianbister/asr:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service asr-image-builder is only for building the image"]
+    restart: "no"
+
   asr-tiny:
     <<: *asr-base
     expose:
@@ -88,6 +94,9 @@ services:
   # --- DEVELOPMENT SERVICES (Profile: dev) ---
   asr-tiny-dev:
     <<: *asr-base
+    build:
+      context: ./asr-service
+    image: asr:local
     expose:
       - "8000"
     environment:
@@ -107,6 +116,9 @@ services:
 
   asr-small-dev:
     <<: *asr-base
+    build:
+      context: ./asr-service
+    image: asr:local
     expose:
       - "8000"
     environment:
@@ -126,6 +138,9 @@ services:
 
   asr-medium-dev:
     <<: *asr-base
+    build:
+      context: ./asr-service
+    image: asr:local
     expose:
       - "8000"
     environment:
@@ -145,6 +160,9 @@ services:
 
   asr-large-dev:
     <<: *asr-base
+    build:
+      context: ./asr-service
+    image: asr:local
     expose:
       - "8000"
     environment:
@@ -163,9 +181,7 @@ services:
           - asr-large-link
 
   diarization:
-    build:
-      context: ./diarization-service
-    image: diarization-service:local
+    image: ghcr.io/christianbister/diarization:latest
     expose:
       - "8000"
     environment:
@@ -182,8 +198,18 @@ services:
         aliases:
           - diarization-link
 
+  diarization-image-builder:
+    build:
+      context: ./diarization-service
+    image: ghcr.io/christianbister/diarization:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service diarization-image-builder is only for building the image"]
+    restart: "no"
+
   diarization-dev:
-    image: diarization-service:local
+    build:
+      context: ./diarization-service
+    image: diarization:local
     expose:
       - "8000"
     environment:
@@ -222,6 +248,7 @@ services:
       - emotion-state
       - emotion-vibe
       - metadata
+      - ner
       - processor
       - sentiment
     profiles: [ "prod" ]
@@ -249,6 +276,7 @@ services:
       - emotion-state-dev
       - emotion-vibe-dev
       - metadata-dev
+      - ner-dev
       - processor-dev
       - sentiment-dev
     profiles: [ "dev" ]
@@ -257,9 +285,7 @@ services:
       - app
 
   barcode:
-    build:
-      context: ./barcode-service
-    image: barcode-service:local
+    image: ghcr.io/christianbister/barcode:latest
     expose:
       - "8000"
     profiles: [ "prod" ]
@@ -268,8 +294,18 @@ services:
         aliases:
           - barcode-link
 
+  barcode-image-builder:
+    build:
+      context: ./barcode-service
+    image: ghcr.io/christianbister/barcode:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service barcode-image-builder is only for building the image"]
+    restart: "no"
+
   barcode-dev:
-    image: barcode-service:local
+    build:
+      context: ./barcode-service
+    image: barcode:local
     expose:
       - "8000"
     volumes:
@@ -284,9 +320,7 @@ services:
           - barcode-link
 
   sentiment:
-    build:
-      context: ./sentiment-service
-    image: sentiment-service:local
+    image: ghcr.io/christianbister/sentiment:latest
     expose:
       - "8000"
     environment:
@@ -301,8 +335,18 @@ services:
         aliases:
           - sentiment-link
 
+  sentiment-image-builder:
+    build:
+      context: ./sentiment-service
+    image: ghcr.io/christianbister/sentiment:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service sentiment-image-builder is only for building the image"]
+    restart: "no"
+
   sentiment-dev:
-    image: sentiment-service:local
+    build:
+      context: ./sentiment-service
+    image: sentiment:local
     expose:
       - "8000"
     environment:
@@ -318,10 +362,51 @@ services:
         aliases:
           - sentiment-link
 
-  emotion:
+  ner:
+    image: ghcr.io/christianbister/ner:latest
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      NER_MODEL_ID: "Davlan/xlm-roberta-large-ner-hrl"
+    restart: unless-stopped
+    volumes:
+      - hf_cache:/root/.cache
+    profiles: [ "prod" ]
+    networks:
+      app:
+        aliases:
+          - ner-link
+
+  ner-image-builder:
     build:
-      context: ./emotion-service
-    image: emotion-service:local
+      context: ./ner-service
+    image: ghcr.io/christianbister/ner:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service ner-image-builder is only for building the image"]
+    restart: "no"
+
+  ner-dev:
+    build:
+      context: ./ner-service
+    image: ner:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      NER_MODEL_ID: "Davlan/xlm-roberta-large-ner-hrl"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./ner-service/app:/srv/app:rw
+      - hf_cache:/root/.cache
+    profiles: [ "dev" ]
+    networks:
+      app:
+        aliases:
+          - ner-link
+
+  emotion:
+    image: ghcr.io/christianbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -335,8 +420,16 @@ services:
         aliases:
           - emotion-link
 
+  emotion-image-builder:
+    build:
+      context: ./emotion-service
+    image: ghcr.io/christianbister/emotion:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service emotion-image-builder is only for building the image"]
+    restart: "no"
+
   emotion-dev:
-    image: emotion-service:local
+    image: emotion:local
     expose:
       - "8000"
     environment:
@@ -354,7 +447,7 @@ services:
 
   # --- EMOTION MODEL VARIANTS (Profile: prod) ---
   emotion-nuance:
-    image: emotion-service:local
+    image: ghcr.io/christianbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -369,7 +462,7 @@ services:
           - emotion-nuance-link
 
   emotion-vibe:
-    image: emotion-service:local
+    image: ghcr.io/christianbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -384,7 +477,7 @@ services:
           - emotion-vibe-link
 
   emotion-state:
-    image: emotion-service:local
+    image: ghcr.io/christianbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -400,7 +493,9 @@ services:
 
   # --- EMOTION MODEL VARIANTS (Profile: dev) ---
   emotion-nuance-dev:
-    image: emotion-service:local
+    build:
+      context: ./emotion-service
+    image: emotion:local
     expose:
       - "8000"
     environment:
@@ -417,7 +512,9 @@ services:
           - emotion-nuance-link
 
   emotion-vibe-dev:
-    image: emotion-service:local
+    build:
+      context: ./emotion-service
+    image: emotion:local
     expose:
       - "8000"
     environment:
@@ -434,7 +531,9 @@ services:
           - emotion-vibe-link
 
   emotion-state-dev:
-    image: emotion-service:local
+    build:
+      context: ./emotion-service
+    image: emotion:local
     expose:
       - "8000"
     environment:
@@ -453,9 +552,7 @@ services:
           - emotion-state-link
 
   emotion-hate:
-    build:
-      context: ./emotion-service
-    image: emotion-service:local
+    image: ghcr.io/christianbister/emotion:latest
     expose:
       - "8000"
     environment:
@@ -470,7 +567,9 @@ services:
           - emotion-hate-link
 
   emotion-hate-dev:
-    image: emotion-service:local
+    build:
+      context: ./emotion-service
+    image: emotion:local
     expose:
       - "8000"
     environment:
@@ -487,9 +586,7 @@ services:
           - emotion-hate-link
 
   processor:
-    build:
-      context: ./processor-service
-    image: processor-service:local
+    image: ghcr.io/christianbister/processor:latest
     expose:
       - "8000"
     profiles: [ "prod" ]
@@ -498,8 +595,18 @@ services:
         aliases:
           - processor-link
 
+  processor-image-builder:
+    build:
+      context: ./processor-service
+    image: ghcr.io/christianbister/processor:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service processor-image-builder is only for building the image"]
+    restart: "no"
+
   processor-dev:
-    image: processor-service:local
+    build:
+      context: ./processor-service
+    image: processor:local
     expose:
       - "8000"
     volumes:
@@ -514,9 +621,7 @@ services:
           - processor-link
 
   callback-tester:
-    build:
-      context: ./callback-tester
-    image: callback-tester:local
+    image: ghcr.io/christianbister/callback-tester:latest
     expose:
       - "8000"
     volumes:
@@ -527,7 +632,17 @@ services:
         aliases:
           - callback-tester-link
 
+  callback-tester-image-builder:
+    build:
+      context: ./callback-tester
+    image: ghcr.io/christianbister/callback-tester:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service callback-tester-image-builder is only for building the image"]
+    restart: "no"
+
   callback-tester-dev:
+    build:
+      context: ./callback-tester
     image: callback-tester:local
     expose:
       - "8000"
@@ -544,9 +659,7 @@ services:
           - callback-tester-link
 
   metadata:
-    build:
-      context: ./metadata-service
-    image: metadata:local
+    image: ghcr.io/christianbister/metadata:latest
     environment:
       <<: *common-env
       MAX_DOWNLOAD_BYTES: 2097152000
@@ -558,7 +671,17 @@ services:
       app:
         aliases:
           - metadata-link
+
+  metadata-image-builder:
+    build:
+      context: ./metadata-service
+    image: ghcr.io/christianbister/metadata:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service metadata-image-builder is only for building the image"]
+    restart: "no"
   metadata-dev:
+    build:
+      context: ./metadata-service
     image: metadata:local
     environment:
       <<: *common-env
