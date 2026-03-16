@@ -1,0 +1,26 @@
+meta {
+  name: ner
+  type: http
+  seq: 31
+}
+
+post {
+  url: {{baseUrl}}/ner/v1/ner
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "text": "Erst kürzlich hat BMW Hunderttausende Autos wegen Brandgefahr zurückgerufen. Nun schon wieder. Allerdings wegen einer anderen Ursache.\n\nBMW ruft erneut weltweit Hunderttausende Fahrzeuge wegen möglicher Brandgefahr zurück. Das geht aus einem in der Datenbank des Kraftfahrt-Bundesamts (KBA) veröffentlichten Rückruf hervor, den der Autobauer aus München bestätigt. Betroffen seien die Modelle i5, 7er, M5, 5er und i7 aus dem Produktionszeitraum vom 9. Juni 2022 bis 5. Dezember 2025.\n\nWeltweit sind 337.374 Fahrzeuge potenziell betroffen, deutschlandweit sind es 29.441 Fahrzeuge, wie das KBA mitteilte. Demnach könne die mangelhafte Verlegung des Cockpit-Kabelbaumes „beim Ersatz des Mikrofilters zu Beschädigungen an Kabeln und damit zu einem Kurzschluss mit Rauchentwicklung und Brandfolge führen“. Als Maßnahme werde die Verlegung des Cockpit-Kabelbaumes geprüft und gegebenenfalls nachgebessert.\n\nWas Kundinnen und Kunden nun wissen sollten 'Im Zusammenhang mit diesem Fehlerbild ist kein Unfall bekannt', teilte ein BMW-Sprecher mit. Sollte das Fahrzeug bereits einen Ölservice und somit einen Mikrofilterwechsel erhalten haben, sei eine umgehende Prüfung und eine eventuelle Nacharbeit der Kabel notwendig. Sollte noch kein Ölservice und somit kein Mikrofilterwechsel durchgeführt worden sein, bestehe kein unmittelbarer Handlungsbedarf, eine Nacharbeit beim ersten Ölservice sei ausreichend, sagte der Sprecher.\n\nDritter Rückruf in fünf Monaten\n\nSchon im vergangenen Herbst hatte BMW Hunderttausende Autos [1] aus den Jahren 2015 bis 2021 zurückgerufen, weil es auch hier durch ein Starterproblem im schlimmsten Fall zu Bränden kommen konnte. Im Februar kamen dann weitere Modellreihen mit gefährdeten Startern [2] dazu.\n\nDer neueste BMW-Rückruf, diesmal wegen eines Kabelbaums, ist durch Eingabe des Modelltyps auch in der öffentlichen Datenbank des KBA [3] sichtbar. Über die Fahrzeug-Identifizierungsnummer (FIN) ist dies auch auf der Rückrufseite von BMW [4] direkt möglich."
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

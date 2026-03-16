@@ -1,0 +1,16 @@
+meta {
+  name: ner health
+  type: http
+  seq: 30
+}
+
+get {
+  url: {{baseUrl}}/asr-small/health
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
