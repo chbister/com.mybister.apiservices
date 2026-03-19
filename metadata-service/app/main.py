@@ -295,6 +295,15 @@ async def _download_to_temp(url: str, dirpath: str) -> Tuple[str, str]:
     """
     filename = "downloaded_file"
     async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT_S, follow_redirects=True) as client:
+        # Before downloading, check if it exists
+        try:
+            head_res = await client.head(url)
+            head_res.raise_for_status()
+        except Exception as e:
+            logger.error("HEAD request failed for %s: %s", url, e)
+            # We still try to GET if HEAD fails, some servers don't support HEAD properly
+            pass
+
         r = await client.get(url)
         r.raise_for_status()
 
@@ -384,6 +393,33 @@ async def _post_callback(callback_url: str, payload: Dict[str, Any]) -> None:
     except Exception as e:
         # Callback failures should not crash the job; store warning in job record if desired.
         logger.error("Callback failed for job %s: %s", payload.get("job_id"), e)
+
+
+async def _run_job_with_download(job_id: str, tmpdir: str, file_url: str, source: Dict[str, Any], callback_url: Optional[str]):
+    logger.info("Starting job %s with download from %s", job_id, file_url)
+    JOBS[job_id]["status"] = "running"
+    JOBS[job_id]["started_at_utc"] = _utc_now_iso()
+
+    try:
+        path, original_name = await _download_to_temp(file_url, tmpdir)
+        payload = await asyncio.to_thread(_extract_all, path, original_name, source)
+        JOBS[job_id]["status"] = "done"
+        JOBS[job_id]["finished_at_utc"] = _utc_now_iso()
+        JOBS[job_id]["result"] = payload
+        logger.info("Job %s completed successfully", job_id)
+
+        if callback_url:
+            await _post_callback(callback_url, payload)
+
+    except Exception as e:
+        logger.error("Job %s failed: %s", job_id, e)
+        JOBS[job_id]["status"] = "failed"
+        JOBS[job_id]["error"] = str(e)
+        if callback_url:
+            await _post_callback(callback_url, {"job_id": job_id, "status": "failed", "error": str(e)})
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        logger.debug("Cleaned up temp directory %s for job %s", tmpdir, job_id)
 
 
 async def _run_job(job_id: str, tmpdir: str, path: str, original_name: str, source: Dict[str, Any], callback_url: Optional[str]):
@@ -493,34 +529,59 @@ async def extract_metadata(
                         raise HTTPException(status_code=413, detail="Uploaded file exceeds MAX_DOWNLOAD_BYTES limit")
             source = {"type": "upload"}
             original_name = safe_name
+
+            wants_async = bool(force_async or callback_url)
+            if wants_async:
+                JOBS[job_id] = {"status": "queued", "created_at_utc": _utc_now_iso()}
+                background_tasks.add_task(_run_job, job_id, tmpdir, path, original_name, source, callback_url)
+                return JSONResponse(
+                    status_code=202,
+                    content={
+                        "job_id": job_id,
+                        "status": "queued",
+                        "status_url": f"/metadata/status/{job_id}",
+                        "download_url": f"/metadata/download/{job_id}"
+                    }
+                )
+
+            # Sync path for upload
+            try:
+                payload = await asyncio.to_thread(_extract_all, path, original_name, source)
+                logger.info("Metadata extracted successfully (sync)")
+                return payload
+            finally:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+                logger.debug("Cleaned up temp directory %s", tmpdir)
         else:
             # Download from URL
-            logger.info("Downloading file from %s", file_url)
-            source = {"type": "url", "file_url": str(file_url)}
-            path, original_name = await _download_to_temp(str(file_url), tmpdir)
+            logger.info("Checking if file exists at %s", file_url)
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+                try:
+                    head_res = await client.head(str(file_url))
+                    head_res.raise_for_status()
+                except Exception as e:
+                    logger.warning("HEAD check failed for %s: %s. Proceeding with download attempt.", file_url, e)
+                    # We might want to be stricter here, but often HEAD fails while GET works.
+                    # However, the requirement says "fail/unsuccessful-return if file for file_url does not exist".
+                    # Let's try a GET with a short timeout or range request if we want to be sure?
+                    # For now, let's at least try to see if it's a 404.
+                    if hasattr(e, 'response') and e.response.status_code == 404:
+                        raise HTTPException(status_code=404, detail=f"File not found at URL: {file_url}")
 
-        wants_async = bool(force_async or callback_url)
-        if wants_async:
+            source = {"type": "url", "file_url": str(file_url)}
             JOBS[job_id] = {"status": "queued", "created_at_utc": _utc_now_iso()}
-            background_tasks.add_task(_run_job, job_id, tmpdir, path, original_name, source, callback_url)
+            # For file_url, we ALWAYS go async to avoid timeout
+            background_tasks.add_task(_run_job_with_download, job_id, tmpdir, str(file_url), source, callback_url)
             return JSONResponse(
-                status_code=202, 
+                status_code=202,
                 content={
-                    "job_id": job_id, 
+                    "job_id": job_id,
                     "status": "queued",
                     "status_url": f"/metadata/status/{job_id}",
-                    "download_url": f"/metadata/download/{job_id}"
+                    "download_url": f"/metadata/download/{job_id}",
+                    "message": "File download and processing started in background."
                 }
             )
-
-        # Sync path
-        try:
-            payload = await asyncio.to_thread(_extract_all, path, original_name, source)
-            logger.info("Metadata extracted successfully (sync)")
-            return payload
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            logger.debug("Cleaned up temp directory %s", tmpdir)
 
     except Exception as e:
         shutil.rmtree(tmpdir, ignore_errors=True)

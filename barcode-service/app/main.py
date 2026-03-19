@@ -27,6 +27,16 @@ async def get_image_bytes(file: Optional[UploadFile], file_url: Optional[str]) -
     if file:
         return await file.read()
     elif file_url:
+        logger.info("Checking if image exists at %s", file_url)
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+            try:
+                head_res = await client.head(file_url)
+                head_res.raise_for_status()
+            except Exception as e:
+                logger.warning("HEAD check failed for %s: %s. Proceeding with download attempt.", file_url, e)
+                if hasattr(e, 'response') and e.response.status_code == 404:
+                    raise HTTPException(status_code=404, detail=f"Image not found at URL: {file_url}")
+
         logger.info("Downloading image from %s", file_url)
         async with httpx.AsyncClient(follow_redirects=True) as client:
             try:
@@ -34,6 +44,8 @@ async def get_image_bytes(file: Optional[UploadFile], file_url: Optional[str]) -
                 if response.status_code != 200:
                     raise HTTPException(status_code=400, detail=f"Failed to download image from URL: {response.status_code}")
                 return response.content
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error("Download failed: %s", str(e))
                 raise HTTPException(status_code=400, detail=f"Failed to download image from URL: {str(e)}")

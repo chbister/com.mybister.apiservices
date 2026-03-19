@@ -326,13 +326,51 @@ async def speaker_check(
             with os.fdopen(fd, "wb") as tmp:
                 tmp.write(await file.read())
         else:
-            async with httpx.AsyncClient(follow_redirects=True) as client:
-                async with client.stream("GET", file_url) as resp:
-                    if resp.status_code != 200:
-                        raise HTTPException(status_code=400, detail=f"Failed to download file: {resp.status_code}")
-                    with os.fdopen(fd, "wb") as tmp:
-                        async for chunk in resp.aiter_bytes():
-                            tmp.write(chunk)
+            # Download from URL
+            logger.info("Checking if file exists at %s", file_url)
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+                try:
+                    head_res = await client.head(file_url)
+                    head_res.raise_for_status()
+                except Exception as e:
+                    logger.warning("HEAD check failed for %s: %s. Proceeding with download attempt.", file_url, e)
+                    if hasattr(e, 'response') and e.response.status_code == 404:
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                        raise HTTPException(status_code=404, detail=f"File not found at URL: {file_url}")
+
+            # Switch to async for file_url to avoid timeout
+            job_id = f"{uuid.uuid4()}-{socket.gethostname()}"
+            logger.info("Switching to async mode for file_url job %s", job_id)
+            save_job_result(job_id, {}, "processing")
+            
+            # Use a wrapper that downloads and then runs the job
+            async def download_and_run():
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True) as client:
+                        async with client.stream("GET", file_url) as resp:
+                            if resp.status_code != 200:
+                                raise Exception(f"Failed to download file: {resp.status_code}")
+                            with open(temp_path, 'wb') as tmp:
+                                async for chunk in resp.aiter_bytes():
+                                    tmp.write(chunk)
+                    
+                    await run_async_job(job_id, temp_path, callback_url, 
+                                       None, file_url)
+                except Exception as e:
+                    logger.error("Async download/job failed: %s", e)
+                    save_job_result(job_id, {"error": str(e)}, "failed")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+            asyncio.create_task(download_and_run())
+            
+            return JSONResponse(status_code=202, content={
+                "job_id": job_id,
+                "status_url": f"/v1/diarization/status/{job_id}",
+                "download_url": f"/v1/diarization/download/{job_id}",
+                "message": "File download and processing started in background."
+            })
 
         # Decide path: async if forced or callback given
         if force_async or callback_url:
