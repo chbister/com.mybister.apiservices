@@ -297,11 +297,12 @@ async def _download_to_temp(url: str, dirpath: str) -> Tuple[str, str]:
     async with httpx.AsyncClient(timeout=DOWNLOAD_TIMEOUT_S, follow_redirects=True) as client:
         # Before downloading, check if it exists
         try:
-            head_res = await client.head(url)
-            head_res.raise_for_status()
+            check_res = await client.get(url, headers={"Range": "bytes=0-0"})
+            check_res.raise_for_status()
         except Exception as e:
-            logger.error("HEAD request failed for %s: %s", url, e)
-            # We still try to GET if HEAD fails, some servers don't support HEAD properly
+            logger.error("File check (GET Range) failed for %s: %s", url, e)
+            # We still try to GET the whole file if the check fails, 
+            # as some servers might not support Range requests.
             pass
 
         r = await client.get(url)
@@ -409,7 +410,7 @@ async def _run_job_with_download(job_id: str, tmpdir: str, file_url: str, source
         logger.info("Job %s completed successfully", job_id)
 
         if callback_url:
-            await _post_callback(callback_url, payload)
+            await _post_callback(callback_url, {"job_id": job_id, "status": "done", "result": payload})
 
     except Exception as e:
         logger.error("Job %s failed: %s", job_id, e)
@@ -439,11 +440,11 @@ async def _run_job(job_id: str, tmpdir: str, path: str, original_name: str, sour
 
     except Exception as e:
         logger.error("Job %s failed: %s", job_id, e)
-        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["status"] = "failed"
         JOBS[job_id]["finished_at_utc"] = _utc_now_iso()
         JOBS[job_id]["error"] = str(e)
         if callback_url:
-            await _post_callback(callback_url, {"job_id": job_id, "status": "error", "error": str(e)})
+            await _post_callback(callback_url, {"job_id": job_id, "status": "failed", "error": str(e)})
 
     finally:
         # Cleanup temp dir
@@ -557,16 +558,14 @@ async def extract_metadata(
             logger.info("Checking if file exists at %s", file_url)
             async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
                 try:
-                    head_res = await client.head(str(file_url))
-                    head_res.raise_for_status()
+                    check_res = await client.get(str(file_url), headers={"Range": "bytes=0-0"})
+                    check_res.raise_for_status()
                 except Exception as e:
-                    logger.warning("HEAD check failed for %s: %s. Proceeding with download attempt.", file_url, e)
-                    # We might want to be stricter here, but often HEAD fails while GET works.
-                    # However, the requirement says "fail/unsuccessful-return if file for file_url does not exist".
-                    # Let's try a GET with a short timeout or range request if we want to be sure?
-                    # For now, let's at least try to see if it's a 404.
-                    if hasattr(e, 'response') and e.response.status_code == 404:
-                        raise HTTPException(status_code=404, detail=f"File not found at URL: {file_url}")
+                    logger.error("File check failed for %s: %s", file_url, e)
+                    status_code = 400
+                    if hasattr(e, 'response') and e.response is not None:
+                        status_code = e.response.status_code
+                    raise HTTPException(status_code=status_code, detail=f"File check failed at URL: {file_url} (Error: {e})")
 
             source = {"type": "url", "file_url": str(file_url)}
             JOBS[job_id] = {"status": "queued", "created_at_utc": _utc_now_iso()}

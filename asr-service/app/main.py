@@ -188,10 +188,36 @@ async def run_async_job(job_id: str, file_path: str, lang: Optional[str], vad: b
                     logger.error("Callback logic failed for job %s: %s", job_id, e)
         else:
             save_job_result(job_id, {"error": response["error"]}, "failed")
+            if callback:
+                try:
+                    headers = {}
+                    if CALLBACK_AUTH_SECRET:
+                        headers["Authorization"] = f"Bearer {CALLBACK_AUTH_SECRET}"
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            callback,
+                            json={"job_id": job_id, "status": "failed", "error": response["error"]},
+                            headers=headers
+                        )
+                except Exception as e:
+                    logger.error("Error callback failed for job %s: %s", job_id, e)
             
     except Exception as e:
         logger.error("Async job wrapper failed for %s: %s", job_id, e)
         save_job_result(job_id, {"error": str(e)}, "failed")
+        if callback:
+            try:
+                headers = {}
+                if CALLBACK_AUTH_SECRET:
+                    headers["Authorization"] = f"Bearer {CALLBACK_AUTH_SECRET}"
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        callback,
+                        json={"job_id": job_id, "status": "failed", "error": str(e)},
+                        headers=headers
+                    )
+            except Exception as ex:
+                logger.error("Error callback failed for job %s: %s", job_id, ex)
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -226,23 +252,29 @@ async def asr(
         suffix = os.path.splitext(path)[1] or ".bin"
 
     temp_fd, temp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(temp_fd) # Close it as we will open it with 'wb' or via os.fdopen
+    
+    lang_val = None if (language or "").lower() == "auto" else language
+
     try:
         if file:
-            with os.fdopen(temp_fd, 'wb') as tmp:
+            with open(temp_path, 'wb') as tmp:
                 tmp.write(await file.read())
         else:
             # Download from URL
             logger.info("Checking if file exists at %s", file_url)
             async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
                 try:
-                    head_res = await client.head(file_url)
-                    head_res.raise_for_status()
+                    check_res = await client.get(file_url, headers={"Range": "bytes=0-0"})
+                    check_res.raise_for_status()
                 except Exception as e:
-                    logger.warning("HEAD check failed for %s: %s. Proceeding with download attempt.", file_url, e)
-                    if hasattr(e, 'response') and e.response.status_code == 404:
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                        raise HTTPException(status_code=404, detail=f"File not found at URL: {file_url}")
+                    logger.error("File check failed for %s: %s", file_url, e)
+                    status_code = 400
+                    if hasattr(e, 'response') and e.response is not None:
+                        status_code = e.response.status_code
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    raise HTTPException(status_code=status_code, detail=f"File check failed at URL: {file_url} (Error: {e})")
 
             # Switch to async for file_url to avoid timeout
             job_id = f"{ulid.ULID()}-{socket.gethostname()}"
@@ -284,8 +316,6 @@ async def asr(
         except Exception as e:
             logger.warning("Could not detect duration: %s", e)
             duration_sec = 0
-
-        lang_val = None if (language or "").lower() == "auto" else language
 
         if duration_sec > ASYNC_THRESHOLD_SEC or force_async:
             # Using ULID and hostname for the job_id
