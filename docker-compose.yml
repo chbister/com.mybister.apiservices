@@ -43,6 +43,7 @@ services:
       <<: *asr-env
       ASR_MODEL_SIZE: "tiny"
       UVICORN_LOG_LEVEL: "info"
+    restart: unless-stopped
     profiles: [ "prod" ]
     networks:
       edge:
@@ -58,6 +59,7 @@ services:
       <<: *asr-env
       ASR_MODEL_SIZE: "small"
       UVICORN_LOG_LEVEL: "info"
+    restart: unless-stopped
     profiles: [ "prod" ]
     networks:
       edge:
@@ -73,6 +75,7 @@ services:
       <<: *asr-env
       ASR_MODEL_SIZE: "medium"
       UVICORN_LOG_LEVEL: "info"
+    restart: unless-stopped
     profiles: [ "prod" ]
     networks:
       edge:
@@ -88,6 +91,7 @@ services:
       <<: *asr-env
       ASR_MODEL_SIZE: "large-v3"
       UVICORN_LOG_LEVEL: "info"
+    restart: unless-stopped
     profiles: [ "prod" ]
     networks:
       edge:
@@ -197,6 +201,7 @@ services:
       DIARIZATION_MAX_ANALYZE_SEC: 120
       DIARIZATION_MIN_SPEAKER_SEC: 10
       DIARIZATION_MIN_SPEAKER_SHARE: 0.15
+    restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache/huggingface
       - ct2_cache:/root/.cache/ctranslate2
@@ -245,6 +250,7 @@ services:
       - "80"
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: unless-stopped
     depends_on:
       - asr-large
       - asr-medium
@@ -298,6 +304,7 @@ services:
     image: ghcr.io/chbister/barcode:latest
     expose:
       - "8000"
+    restart: unless-stopped
     profiles: [ "prod" ]
     networks:
       edge:
@@ -428,6 +435,7 @@ services:
     environment:
       <<: *common-env
       EMOTION_MODEL_ID: "lxyuan/distilbert-base-multilingual-cased-sentiments-student"
+    restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
@@ -471,6 +479,7 @@ services:
     environment:
       <<: *common-env
       EMOTION_MODEL_ID: "SamLowe/roberta-base-go_emotions"
+    restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
@@ -487,6 +496,7 @@ services:
     environment:
       <<: *common-env
       EMOTION_MODEL_ID: "nlptown/bert-base-multilingual-uncased-sentiment" # Excellent for vibe/stars across languages
+    restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
@@ -503,6 +513,7 @@ services:
     environment:
       <<: *common-env
       EMOTION_MODEL_ID: "j-hartmann/emotion-english-distilroberta-base" # 7 core emotions
+    restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
@@ -582,6 +593,7 @@ services:
     environment:
       <<: *common-env
       EMOTION_MODEL_ID: "cardiffnlp/twitter-roberta-base-hate"
+    restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
     profiles: [ "prod" ]
@@ -694,6 +706,7 @@ services:
       <<: *common-env
       MAX_DOWNLOAD_BYTES: 2097152000
       DOWNLOAD_TIMEOUT_S: 30
+    restart: unless-stopped
     profiles: [ "prod" ]
     expose:
       - "8000"
