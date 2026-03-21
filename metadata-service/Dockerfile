@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libmagic1 \
     ca-certificates \
+    iproute2 \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv

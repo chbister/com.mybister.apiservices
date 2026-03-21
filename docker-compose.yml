@@ -723,10 +723,13 @@ services:
     profiles: [ "prod" ]
     entrypoint: ["echo", "Service metadata-image-builder is only for building the image"]
     restart: "no"
+
   metadata-dev:
     build:
       context: ./metadata-service
     image: metadata:local
+    cap_add:
+      - NET_ADMIN
     environment:
       <<: *common-env
       MAX_DOWNLOAD_BYTES: 2097152000
