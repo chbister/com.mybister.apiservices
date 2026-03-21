@@ -178,14 +178,14 @@ async def run_async_job(job_id: str, file_path: str, lang: Optional[str], vad: b
                             logger.info("Callback response status: %s", cb_response.status_code)
                             logger.debug("Callback response body: %s", cb_response.text)
                         except httpx.HTTPStatusError as e:
-                            logger.error("Callback failed for job %s with status %s: %s", job_id, e.response.status_code, e.response.text)
+                            logger.error("HTTPStatusError, Callback failed for job %s with status %s: %s", job_id, e.response.status_code, e.response.text)
                         except Exception as e:
                             if cb_response:
-                                logger.error("Callback failed for job %s: %s, Response: %s %s", job_id, e, cb_response.status_code, cb_response.text)
+                                logger.error("Exception A, Callback failed for job %s: %s, Response: %s %s", job_id, e, cb_response.status_code, cb_response.text)
                             else:
-                                logger.error("Callback failed for job %s: %s", job_id, e)
+                                logger.error("Exception B, Callback failed for job %s: %s", job_id, e)
                 except Exception as e:
-                    logger.error("Callback logic failed for job %s: %s", job_id, e)
+                    logger.error("Exception C, Callback logic failed for job %s: %s", job_id, e)
         else:
             save_job_result(job_id, {"error": response["error"]}, "failed")
             if callback:
