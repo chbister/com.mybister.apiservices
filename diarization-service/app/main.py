@@ -8,6 +8,7 @@ import logging
 import json
 import asyncio
 import uuid
+import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -46,6 +47,13 @@ JOBS_DIR = os.getenv("DIAR_JOBS_DIR", "/srv/jobs")
 CALLBACK_AUTH_SECRET = os.getenv("CALLBACK_AUTH_SECRET")
 
 os.makedirs(JOBS_DIR, exist_ok=True)
+
+# Use 'spawn' to avoid issues with forking PyTorch/pyannote objects
+try:
+    mp.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass
+
 # Separate process pool for heavy diarization work
 executor = ProcessPoolExecutor(max_workers=1)
 
@@ -278,8 +286,9 @@ def speaker_check_worker(file_path: str, file_name: Optional[str] = None, file_u
 
 @app.on_event("startup")
 def startup():
-    # Pipeline beim Start laden: verhindert 500 während Download/Cache-States
-    load_pipeline()
+    # No longer loading pipeline in parent process to save memory
+    # Workers will load it on demand
+    logger.info("Startup complete (pipeline loading offloaded to workers)")
 
 
 @app.get("/health")
@@ -289,8 +298,6 @@ def health():
         "service": "speaker_check",
         "diarization_model": DIARIZATION_MODEL,
         "has_token": bool(PYANNOTE_TOKEN),
-        "pipeline_loaded": _PIPELINE is not None,
-        "pipeline_error": _PIPELINE_ERROR,
         "hostname": socket.gethostname(),
         "datetime": datetime.utcnow().isoformat(),
     }
@@ -330,10 +337,6 @@ async def speaker_check(
 
     if not file and not file_url:
         raise HTTPException(status_code=400, detail="Either 'file' or 'file_url' must be provided.")
-
-    if _PIPELINE is None:
-        # Kein 500, sondern sauber 503 -> Client kann retryen
-        raise HTTPException(status_code=503, detail=_PIPELINE_ERROR or "Pipeline not ready yet.")
 
     suffix = ".bin"
     if file and file.filename:
