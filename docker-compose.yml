@@ -266,6 +266,7 @@ services:
       - metadata
       - ner
       - processor
+      - qrcode
       - sentiment
     profiles: [ "prod" ]
     networks:
@@ -294,6 +295,7 @@ services:
       - metadata-dev
       - ner-dev
       - processor-dev
+      - qrcode-dev
       - sentiment-dev
     profiles: [ "dev" ]
     networks:
@@ -337,6 +339,44 @@ services:
       app:
         aliases:
           - barcode-link
+
+  qrcode:
+    image: ghcr.io/chbister/qrcode:latest
+    expose:
+      - "8000"
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - qrcode-link
+
+  qrcode-image-builder:
+    build:
+      context: ./qrcode-service
+    image: ghcr.io/chbister/qrcode:latest
+    profiles: [ "prod" ]
+    entrypoint: ["echo", "Service qrcode-image-builder is only for building the image"]
+    restart: "no"
+
+  qrcode-dev:
+    build:
+      context: ./qrcode-service
+    image: qrcode:local
+    expose:
+      - "8000"
+    volumes:
+      - ./qrcode-service/app:/srv/app:rw
+    environment:
+      <<: *common-env
+      UVICORN_RELOAD: "1"
+    profiles: [ "dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - qrcode-link
 
   sentiment:
     image: ghcr.io/chbister/sentiment:latest

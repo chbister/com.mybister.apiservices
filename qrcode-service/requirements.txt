@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+python-multipart
+qrcode[pil]
+Pillow
+httpx
