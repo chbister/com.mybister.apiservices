@@ -280,6 +280,7 @@ services:
       - app
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
       # Router (HTTPS)
       - "traefik.http.routers.main.rule=Host(`ask.mybister.com`)"
       - "traefik.http.routers.main.entrypoints=websecure"
@@ -295,7 +296,7 @@ services:
       - "traefik.http.routers.main.middlewares=apikey-auth"
       - "traefik.http.middlewares.apikey-auth.forwardauth.address=http://apikey-auth:8000"
       # Service (Container-Port)
-      - "traefik.http.services.main.loadbalancer.server.port=8080"
+      - "traefik.http.services.main.loadbalancer.server.port=80"
 
   gateway-dev:
     image: nginx:alpine
