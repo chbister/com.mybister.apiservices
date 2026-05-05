@@ -37,7 +37,7 @@ services:
     build:
       context: ./asr-service
     image: ghcr.io/chbister/asr:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service asr-image-builder is only for building the image"]
     restart: "no"
 
@@ -222,7 +222,7 @@ services:
     build:
       context: ./diarization-service
     image: ghcr.io/chbister/diarization:latest
-    profiles: [ "prod" ]
+    profiles: [ "builder" ]
     entrypoint: ["echo", "Service diarization-image-builder is only for building the image"]
     restart: "no"
 
@@ -342,7 +342,7 @@ services:
     build:
       context: ./barcode-service
     image: ghcr.io/chbister/barcode:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service barcode-image-builder is only for building the image"]
     restart: "no"
 
@@ -380,7 +380,7 @@ services:
     build:
       context: ./qrcode-service
     image: ghcr.io/chbister/qrcode:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service qrcode-image-builder is only for building the image"]
     restart: "no"
 
@@ -423,7 +423,7 @@ services:
     build:
       context: ./sentiment-service
     image: ghcr.io/chbister/sentiment:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service sentiment-image-builder is only for building the image"]
     restart: "no"
 
@@ -468,7 +468,7 @@ services:
     build:
       context: ./ner-service
     image: ghcr.io/chbister/ner:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service ner-image-builder is only for building the image"]
     restart: "no"
 
@@ -513,7 +513,7 @@ services:
     build:
       context: ./emotion-service
     image: ghcr.io/chbister/emotion:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service emotion-image-builder is only for building the image"]
     restart: "no"
 
@@ -702,7 +702,7 @@ services:
     build:
       context: ./processor-service
     image: ghcr.io/chbister/processor:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service processor-image-builder is only for building the image"]
     restart: "no"
 
@@ -741,7 +741,7 @@ services:
     build:
       context: ./callback-tester
     image: ghcr.io/chbister/callback-tester:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service callback-tester-image-builder is only for building the image"]
     restart: "no"
 
@@ -784,7 +784,7 @@ services:
     build:
       context: ./metadata-service
     image: ghcr.io/chbister/metadata:latest
-    profiles: [ "prod" ]
+    profiles: [ "build" ]
     entrypoint: ["echo", "Service metadata-image-builder is only for building the image"]
     restart: "no"
 
