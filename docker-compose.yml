@@ -27,6 +27,12 @@ x-asr-base: &asr-base
 
 services:
   # --- PRODUCTION SERVICES (Profile: prod) ---
+  apikey-auth:
+    image: ghcr.io/chbister/com.mybister.forwardauthservice:latest
+    environment:
+      API_KEY: ${API_KEY}
+    networks:
+      - proxy-network
   asr-image-builder:
     build:
       context: ./asr-service
@@ -272,6 +278,24 @@ services:
     networks:
       - edge
       - app
+    labels:
+      - "traefik.enable=true"
+      # Router (HTTPS)
+      - "traefik.http.routers.main.rule=Host(`ask.mybister.com`)"
+      - "traefik.http.routers.main.entrypoints=websecure"
+      - "traefik.http.routers.main.tls=true"
+      - "traefik.http.routers.main.tls.certresolver=letsencrypt"
+      # optional: HTTP → HTTPS redirect
+      - "traefik.http.routers.main-http.rule=Host(`ask.mybister.com`)"
+      - "traefik.http.routers.main-http.entrypoints=web"
+      - "traefik.http.routers.main-http.middlewares=redirect-to-https"
+      # Middleware für Redirect
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # Auth
+      - "traefik.http.routers.main.middlewares=apikey-auth"
+      - "traefik.http.middlewares.apikey-auth.forwardauth.address=http://apikey-auth:8000"
+      # Service (Container-Port)
+      - "traefik.http.services.main.loadbalancer.server.port=8080"
 
   gateway-dev:
     image: nginx:alpine
