@@ -37,8 +37,8 @@ jobs:
         shell: bash
         run: |
           # Use docker compose config to get the services and their contexts.
-          # We'll then use jq to filter based on changed files.
-          docker compose --profile prod config --format json > compose.json
+          # We include all profiles that might contain build definitions.
+          docker compose --profile build --profile builder config --format json > compose.json
 
           # Define the changed files as a JSON array.
           # For workflow_dispatch or if critical files changed, we might want to build everything.
@@ -72,7 +72,9 @@ jobs:
                   .services
                   | to_entries
                   | map(
-                      select(.key | endswith("-image-builder"))
+                      # Select services that have a build section.
+                      # This replaces the name-based filter.
+                      select(.value.build != null)
                       | {
                           service: .key,
 
