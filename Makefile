@@ -26,7 +26,11 @@ compose:
 		exit 1; \
 	fi
 	@if [ "$(ACTION)" = "up" ]; then \
-		docker compose --profile $(PROFILE) up -d --scale barcode=2 --scale metadata=2; \
+		if [ "$(PROFILE)" = "prod" ]; then \
+			docker compose --profile $(PROFILE) up -d --scale barcode=2 --scale metadata=2; \
+		else \
+			docker compose --profile $(PROFILE) up -d; \
+		fi \
 	else \
 		docker compose --profile $(PROFILE) down; \
 	fi
@@ -36,6 +40,7 @@ up-prod:
 	$(MAKE) compose PROFILE=prod ACTION=up
 
 up-dev:
+	docker network inspect dev-shared-network >/dev/null 2>&1 || docker network create dev-shared-network
 	$(MAKE) compose PROFILE=dev ACTION=up
 
 down-prod:
