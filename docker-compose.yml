@@ -677,69 +677,187 @@ services:
         aliases:
           - ner-link
 
-  ocr-llm:
-    image: ghcr.io/chbister/ocr-llm:latest
+  extraction:
+    image: ghcr.io/chbister/extraction:latest
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.ocr-llm.rule=Host(`ask.mybister.com`) && PathPrefix(`/ocr-llm`)"
-      - "traefik.http.routers.ocr-llm.entrypoints=websecure"
-      - "traefik.http.routers.ocr-llm.tls=true"
-      - "traefik.http.routers.ocr-llm.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ocr-llm.middlewares=apikey-auth,ocr-llm-strip"
-      - "traefik.http.middlewares.ocr-llm-strip.stripprefix.prefixes=/ocr-llm"
-      - "traefik.http.services.ocr-llm.loadbalancer.server.port=8000"
+      - "traefik.http.routers.extraction.rule=Host(`ask.mybister.com`) && PathPrefix(`/extraction`)"
+      - "traefik.http.routers.extraction.entrypoints=websecure"
+      - "traefik.http.routers.extraction.tls=true"
+      - "traefik.http.routers.extraction.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.extraction.middlewares=apikey-auth,extraction-strip"
+      - "traefik.http.middlewares.extraction-strip.stripprefix.prefixes=/extraction"
+      - "traefik.http.services.extraction.loadbalancer.server.port=8000"
     expose:
       - "8000"
     environment:
       <<: *common-env
-      NER_MODEL_ID: "Davlan/xlm-roberta-base-ner-hrl"
+      NAME_MODEL_ID: "Davlan/xlm-roberta-base-ner-hrl"
+    restart: unless-stopped
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    profiles: [ "prod", "kickfriends-prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - extraction-link
+
+  extraction-image-builder:
+    build:
+      context: ./extraction-service
+    image: ghcr.io/chbister/extraction:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service extraction-image-builder is only for building the image"]
+    restart: "no"
+
+  extraction-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.extraction-dev.rule=PathPrefix(`/extraction`)"
+      - "traefik.http.routers.extraction-dev.entrypoints=web"
+      - "traefik.http.routers.extraction-dev.middlewares=extraction-strip"
+      - "traefik.http.middlewares.extraction-strip.stripprefix.prefixes=/extraction"
+      - "traefik.http.services.extraction-dev.loadbalancer.server.port=8000"
+    build:
+      context: ./extraction-service
+    image: extraction:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      NAME_MODEL_ID: "Davlan/xlm-roberta-base-ner-hrl"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./extraction-service/app:/app/app:rw
+      - hf_cache:/root/.cache/huggingface
+    profiles: [ "dev", "kickfriends-dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - extraction-link
+
+  ocr:
+    image: ghcr.io/chbister/ocr:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.ocr.rule=Host(`ask.mybister.com`) && PathPrefix(`/ocr`)"
+      - "traefik.http.routers.ocr.entrypoints=websecure"
+      - "traefik.http.routers.ocr.tls=true"
+      - "traefik.http.routers.ocr.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ocr.middlewares=apikey-auth,ocr-strip"
+      - "traefik.http.middlewares.ocr-strip.stripprefix.prefixes=/ocr"
+      - "traefik.http.services.ocr.loadbalancer.server.port=8000"
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      SERVICE_ROLE: "API"
+      OCR_ENGINE: EASYOCR
+      OCR_LANG: de,en
+      OCR_MAX_IMAGE_WIDTH: 1600
+      OCR_MAX_IMAGE_HEIGHT: 3000
+      OCR_JOBS_DIR: "/srv/jobs"
     restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
-    profiles: [ "prod" ]
+      - paddle_cache:/root/.paddlex
+      - ocr_jobs:/srv/jobs
+    profiles: [ "prod", "kickfriends-prod" ]
     networks:
       edge:
       app:
         aliases:
-          - ocr-llm-link
+          - ocr-link
 
-  ocr-llm-image-builder:
+  ocr-worker:
+    image: ghcr.io/chbister/ocr:latest
+    command: python -m app.worker
+    environment:
+      <<: *common-env
+      SERVICE_ROLE: "WORKER"
+      OCR_ENGINE: EASYOCR
+      OCR_LANG: de,en
+      OCR_MAX_IMAGE_WIDTH: 1600
+      OCR_MAX_IMAGE_HEIGHT: 3000
+      OCR_PROCESSING_TIMEOUT: 120
+      OCR_REQUEUE_STALE_PROCESSING_JOBS: "true"
+      OCR_JOBS_DIR: "/srv/jobs"
+    restart: unless-stopped
+    volumes:
+      - paddle_cache:/root/.paddlex
+      - ocr_jobs:/srv/jobs
+    profiles: [ "prod", "kickfriends-prod" ]
+    networks:
+      - app
+
+  ocr-image-builder:
     build:
-      context: ./ocr-llm-service
-    image: ghcr.io/chbister/ocr-llm:latest
+      context: ./ocr-service
+    image: ghcr.io/chbister/ocr:latest
     profiles: [ "build" ]
-    entrypoint: ["echo", "Service ocr-llm-image-builder is only for building the image"]
+    entrypoint: ["echo", "Service ocr-image-builder is only for building the image"]
     restart: "no"
 
-  ocr-llm-dev:
+  ocr-dev:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.ocr-llm-dev.rule=PathPrefix(`/ocr-llm`)"
-      - "traefik.http.routers.ocr-llm-dev.entrypoints=web"
-      - "traefik.http.routers.ocr-llm-dev.middlewares=ocr-llm-strip"
-      - "traefik.http.middlewares.ocr-llm-strip.stripprefix.prefixes=/ocr-llm"
-      - "traefik.http.services.ocr-llm-dev.loadbalancer.server.port=8000"
+      - "traefik.http.routers.ocr-dev.rule=PathPrefix(`/ocr`)"
+      - "traefik.http.routers.ocr-dev.entrypoints=web"
+      - "traefik.http.routers.ocr-dev.middlewares=ocr-strip"
+      - "traefik.http.middlewares.ocr-strip.stripprefix.prefixes=/ocr"
+      - "traefik.http.services.ocr-dev.loadbalancer.server.port=8000"
+    platform: linux/amd64
     build:
-      context: ./ocr-llm-service
-    image: ocr-llm:local
+      context: ./ocr-service
+    image: ocr:local
     expose:
       - "8000"
     environment:
       <<: *common-env
-      # NER_MODEL_ID: "dbmdz/bert-large-cased-finetuned-conll03-english"
-      NER_MODEL_ID: "Davlan/xlm-roberta-base-ner-hrl"
+      SERVICE_ROLE: "API"
       UVICORN_RELOAD: "1"
+      OCR_ENGINE: EASYOCR
+      OCR_LANG: de,en
+      OCR_JOBS_DIR: "/srv/jobs"
     volumes:
-      - ./ocr-llm-service/app:/srv/app:rw
+      - ./ocr-service/app:/srv/app:rw
       - hf_cache:/root/.cache
-    profiles: [ "dev" ]
+      - paddle_cache:/root/.paddlex
+      - ocr_jobs:/srv/jobs
+    profiles: [ "dev", "kickfriends-dev" ]
     networks:
       edge:
       app:
         aliases:
-          - ocr-llm-link
+          - ocr-link
+
+  ocr-worker-dev:
+    platform: linux/amd64
+    image: ocr:local
+    command: python -m app.worker
+    environment:
+      <<: *common-env
+      SERVICE_ROLE: "WORKER"
+      OCR_ENGINE: EASYOCR
+      OCR_LANG: de,en
+      OCR_MAX_IMAGE_WIDTH: 1600
+      OCR_MAX_IMAGE_HEIGHT: 3000
+      OCR_PROCESSING_TIMEOUT: 120
+      OCR_REQUEUE_STALE_PROCESSING_JOBS: "true"
+      OCR_JOBS_DIR: "/srv/jobs"
+    volumes:
+      - ./ocr-service/app:/srv/app:rw
+      - paddle_cache:/root/.paddlex
+      - ocr_jobs:/srv/jobs
+    profiles: [ "dev", "kickfriends-dev" ]
+    networks:
+      - app
 
   emotion:
     image: ghcr.io/chbister/emotion:latest
@@ -1206,8 +1324,10 @@ services:
 
 volumes:
   hf_cache:
+  paddle_cache:
   ct2_cache:
   asr_jobs:
+  ocr_jobs:
   callback_data:
 networks:
   edge:

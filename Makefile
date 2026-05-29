@@ -10,15 +10,19 @@ help:
 	@echo "Targets:"
 	@echo "  up-prod       - Start services in production profile"
 	@echo "  up-dev        - Start services in development profile"
+	@echo "  up-kickfriends-prod - Start services in kickfriends production profile"
+	@echo "  up-kickfriends-dev  - Start services in kickfriends development profile"
 	@echo "  down-prod     - Stop services in production profile"
 	@echo "  down-dev      - Stop services in development profile"
+	@echo "  down-kickfriends-prod - Stop services in kickfriends production profile"
+	@echo "  down-kickfriends-dev  - Stop services in kickfriends development profile"
 	@echo ""
-	@echo "Or use: make compose PROFILE=<prod|dev> ACTION=<up|down>"
+	@echo "Or use: make compose PROFILE=<prod|dev|kickfriends-prod|kickfriends-dev> ACTION=<up|down>"
 
 # Generic compose target
 compose:
-	@if [ "$(PROFILE)" != "prod" ] && [ "$(PROFILE)" != "dev" ]; then \
-		echo "Error: Invalid profile. Use 'prod' or 'dev'."; \
+	@if [ "$(PROFILE)" != "prod" ] && [ "$(PROFILE)" != "dev" ] && [ "$(PROFILE)" != "kickfriends-prod" ] && [ "$(PROFILE)" != "kickfriends-dev" ]; then \
+		echo "Error: Invalid profile. Use 'prod', 'dev', 'kickfriends-prod', or 'kickfriends-dev'."; \
 		exit 1; \
 	fi
 	@if [ "$(ACTION)" != "up" ] && [ "$(ACTION)" != "down" ]; then \
@@ -48,3 +52,16 @@ down-prod:
 
 down-dev:
 	$(MAKE) compose PROFILE=dev ACTION=down
+
+up-kickfriends-prod:
+	$(MAKE) compose PROFILE=kickfriends-prod ACTION=up
+
+down-kickfriends-prod:
+	$(MAKE) compose PROFILE=kickfriends-prod ACTION=down
+
+up-kickfriends-dev:
+	docker network inspect dev-shared-network >/dev/null 2>&1 || docker network create dev-shared-network
+	$(MAKE) compose PROFILE=kickfriends-dev ACTION=up
+
+down-kickfriends-dev:
+	$(MAKE) compose PROFILE=kickfriends-dev ACTION=down

@@ -4,8 +4,8 @@ python-multipart
 Pillow
 httpx
 pytesseract
-transformers
-torch
-sentencepiece
-tiktoken
-protobuf
+numpy
+easyocr
+paddleocr
+paddlepaddle
+python-ulid

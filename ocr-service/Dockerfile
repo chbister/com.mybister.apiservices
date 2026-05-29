@@ -1,9 +1,13 @@
 FROM python:3.10-slim
 
-# Install system dependencies for Tesseract OCR
+# Install system dependencies for OCR engines
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libtesseract-dev \
+    tesseract-ocr-deu \
+    tesseract-ocr-eng \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv

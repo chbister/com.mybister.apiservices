@@ -1,10 +1,10 @@
 # OCR/LLM Contact Extraction Service
 
-A Python-based service that performs OCR on uploaded images and uses an LLM (NER) step to extract structured data.
+A Python-based service that performs OCR on uploaded images and uses a candidate validation pipeline to extract structured data.
 
 ## Features
 
-* Extract WhatsApp group member names from screenshots.
+* Extract WhatsApp group member names from screenshots using a robust validation pipeline.
 * Extensible architecture for future extraction modes (e.g., phone numbers).
 * FastAPI-based with `/health` and `/v1/ocr-llm` endpoints.
 
@@ -65,7 +65,17 @@ POST /v1/ocr-llm
 
 ## Environment Variables
 
-* `NER_MODEL_ID`: Hugging Face model ID for NER (default: `dbmdz/bert-large-cased-finetuned-conll03-english`).
+* `OCR_ENGINE`: `TESSERACT` (default), `EASYOCR`, or `PADDLE`.
+* `EXTRACTION_STRATEGY`: `DEFAULT` (default).
+* `NER_MODEL_ID`: Hugging Face model ID for NER (default: `Davlan/xlm-roberta-base-ner-hrl`).
+* `OCR_CLEANUP_REMOVE_UI`: `true` (default) or `false`.
+* `OCR_CLEANUP_REMOVE_STATUS`: `true` (default) or `false`.
+* `OCR_CLEANUP_REMOVE_URLS`: `true` (default) or `false`.
+* `OCR_CLEANUP_REMOVE_PHONE_NUMBERS`: `true` (default) or `false`.
+* `VALIDATION_MAX_NAME_WORDS`: Maximum words in a name (default: `4`).
+* `VALIDATION_MAX_LINE_LENGTH`: Maximum characters in a name line (default: `50`).
+* `VALIDATION_REMOVE_UI`: `true` (default) or `false`.
+* `VALIDATION_REMOVE_STATUS`: `true` (default) or `false`.
 
 ## Development
 
