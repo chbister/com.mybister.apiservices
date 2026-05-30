@@ -21,13 +21,13 @@ jobs:
             runner: [self-hosted, production, b01, apiservices]
             profile: kickfriends-prod
 
-          - name: worker01
-            runner: [self-hosted, production, worker01, apiservices]
-            profile: worker01
+          #- name: worker01
+          #  runner: [self-hosted, production, worker01, apiservices]
+          #  profile: worker01
 
-          - name: frontend01
-            runner: [self-hosted, production, frontend01, apiservices]
-            profile: frontend01
+          #- name: frontend01
+          #  runner: [self-hosted, production, frontend01, apiservices]
+          #  profile: frontend01
 
     runs-on: ${{ matrix.target.runner }}
 
@@ -43,6 +43,6 @@ jobs:
 
       - name: Deploy profile
         run: |
-          docker compose --profile "${{ matrix.target.profile }}" pull
-          docker compose --profile "${{ matrix.target.profile }}" up -d
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile "${{ matrix.target.profile }}" pull
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile "${{ matrix.target.profile }}" up -d
           docker image prune -f
