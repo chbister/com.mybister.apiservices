@@ -1,0 +1,48 @@
+name: Deploy to self-hosted runners
+
+on:
+  workflow_run:
+    workflows:
+      - Build and Push Docker Images
+    types:
+      - completed
+
+jobs:
+  deploy:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: b01
+            runner: [self-hosted, production, b01, apiservices]
+            profile: kickfriends-prod
+
+          - name: worker01
+            runner: [self-hosted, production, worker01, apiservices]
+            profile: worker01
+
+          - name: frontend01
+            runner: [self-hosted, production, frontend01, apiservices]
+            profile: frontend01
+
+    runs-on: ${{ matrix.target.runner }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Deploy profile
+        run: |
+          docker compose --profile "${{ matrix.target.profile }}" pull
+          docker compose --profile "${{ matrix.target.profile }}" up -d
+          docker image prune -f
