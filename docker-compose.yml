@@ -682,7 +682,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.extraction.rule=Host(`ask.mybister.com`) && PathPrefix(`/extraction`)"
+      - "traefik.http.routers.extraction.rule=Host(`ask.vereinstalk.de`) && PathPrefix(`/extraction`)"
       - "traefik.http.routers.extraction.entrypoints=websecure"
       - "traefik.http.routers.extraction.tls=true"
       - "traefik.http.routers.extraction.tls.certresolver=letsencrypt"
@@ -745,7 +745,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.ocr.rule=Host(`ask.mybister.com`) && PathPrefix(`/ocr`)"
+      - "traefik.http.routers.ocr.rule=Host(`ask.vereinstalk.de`) && PathPrefix(`/ocr`)"
       - "traefik.http.routers.ocr.entrypoints=websecure"
       - "traefik.http.routers.ocr.tls=true"
       - "traefik.http.routers.ocr.tls.certresolver=letsencrypt"
