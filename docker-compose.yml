@@ -31,6 +31,10 @@ services:
     image: ghcr.io/chbister/com.mybister.forwardauthservice:latest
     environment:
       API_KEY: ${API_KEY}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.middlewares.apikey-auth.forwardauth.address=http://apikey-auth:8000/"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
     networks:
       - edge
   asr-image-builder:
