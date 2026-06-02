@@ -41,118 +41,76 @@ jobs:
           docker compose --profile build --profile builder config --format json > compose.json
 
           # Define the changed files as a JSON array.
-          # For workflow_dispatch or if critical files changed, we might want to build everything.
-          # tj-actions/changed-files output is already a JSON array.
           CHANGED_FILES='${{ steps.changed-files.outputs.all_changed_files }}'
           EVENT_NAME="${{ github.event_name }}"
           ROOT_DIR=$(pwd)
           
-          # If it's workflow_dispatch, we treat all files as changed (effectively build all).
-          if [ "$EVENT_NAME" == "workflow_dispatch" ]; then
-            # We can leave CHANGED_FILES as empty to signal build all, or fill it with something.
-            # But simpler logic: if it's workflow_dispatch, we skip filtering.
-            echo "Workflow dispatch triggered - building all services."
-            CHANGED_FILES="[]"
-          fi
+          echo "Detected changed files: $CHANGED_FILES"
+          echo "Event name: $EVENT_NAME"
 
           matrix=$(
             jq -c --argjson changed_files "$CHANGED_FILES" --arg event "$EVENT_NAME" --arg root "$ROOT_DIR" '
               # Normalize contexts to be relative to project root
-              # docker compose config --format json usually returns absolute paths.
               
-              # First, check if any critical file changed (docker-compose.yml or this workflow)
-              # If so, we might want to build all. 
+              # Check if any critical file changed (docker-compose.yml) or if it is a manual trigger
               (
                 ($event == "workflow_dispatch") or
-                ($changed_files | any(. == "docker-compose.yml" or startswith(".github/workflows/")))
+                ($changed_files | any(. == "docker-compose.yml"))
               ) as $build_all
               |
-              {
-                include: (
-                  .services
-                  | to_entries
-                  | map(
-                      # Select services that have a build section.
-                      # This replaces the name-based filter.
-                      select(.value.build != null)
-                      | {
-                          service: .key,
-
-                          # Resolve context to be relative to the project root
-                          context:
-                            (if (.value.build | type) == "string"
-                             then .value.build
-                             else .value.build.context
-                             end),
-
-                          dockerfile:
-                            (if (.value.build | type) == "object" and .value.build.dockerfile != null
-                             then .value.build.dockerfile
-                             else "Dockerfile"
-                             end),
-
-                          target:
-                            (if (.value.build | type) == "object" and .value.build.target != null
-                             then .value.build.target
-                             else ""
-                             end),
-
-                          image:
-                            (.value.image // ""),
-
-                          unique_key:
-                            (
-                              (if (.value.build | type) == "string"
-                               then .value.build
-                               else .value.build.context
-                               end)
-                              + "|"
-                              + (if (.value.build | type) == "object" and .value.build.dockerfile != null
-                                 then .value.build.dockerfile
-                                 else "Dockerfile"
-                                 end)
-                              + "|"
-                              + (if (.value.build | type) == "object" and .value.build.target != null
-                                 then .value.build.target
-                                 else ""
-                                 end)
-                            )
-                        }
-                    )
-                  | unique_by(.unique_key)
-                  | map(
-                      . + {
-                        # We need a relative version of the context for file matching
-                        # Strip the root prefix from the absolute context path
-                        rel_context: (.context | sub("^" + $root + "/"; "") | sub("^./"; "") | sub("/$"; "")),
-                        
-                        image_name:
-                          (
-                            if (.image | length) > 0
-                            then
-                              (
-                                .image
-                                | sub("^.*/"; "")
-                                | sub(":[^:]+$"; "")
-                              )
-                            else .service
-                            end
-                          )
-                      }
-                    )
-                  | map(
-                      select(
-                        $build_all or
-                        (
-                          .rel_context as $ctx
-                          | $changed_files | any(startswith($ctx + "/"))
-                        )
-                      )
-                    )
+              # Define shared paths - changes here trigger rebuild of all dependent services
+              ["libs", "packages", "shared", "common"] as $shared_paths
+              |
+              ($changed_files | any(. as $f | $shared_paths | any(. == ($f | split("/") | .[0])))) as $shared_changed
+              |
+              [ .services | to_entries[] 
+                | select(.value.build != null)
+                | .key as $name
+                | (if (.value.build | type) == "string" then .value.build else .value.build.context end) as $ctx
+                | ($ctx | sub("^" + $root + "/"; "") | sub("^./"; "") | sub("/$"; "")) as $rel_ctx
+                | (if (.value.build | type) == "object" then .value.build.dockerfile // "Dockerfile" else "Dockerfile" end) as $df
+                | (if (.value.build | type) == "object" then .value.build.target // "" else "" end) as $target
+                | {
+                    service: $name,
+                    context: $ctx,
+                    rel_context: $rel_ctx,
+                    dockerfile: $df,
+                    target: $target,
+                    image: (.value.image // ""),
+                    unique_key: ($ctx + "|" + $df + "|" + (if (.value.build | type) == "object" then .value.build.target // "" else "" end))
+                  }
+              ]
+              | group_by(.unique_key)
+              | map(
+                  {
+                    services: map(.service) | join(", "),
+                    primary_service: .[0].service,
+                    context: .[0].context,
+                    rel_context: .[0].rel_context,
+                    dockerfile: .[0].dockerfile,
+                    target: .[0].target,
+                    image: .[0].image,
+                    image_name: (if (.[0].image | length) > 0 then (.[0].image | sub("^.*/"; "") | sub(":[^:]+$"; "")) else .[0].service end)
+                  }
                 )
-              }
+              | map(
+                  .rel_context as $ctx
+                  | (
+                      if $build_all then "Global trigger (event: " + $event + " or docker-compose.yml changed)"
+                      elif $shared_changed then "Shared code directory changed"
+                      elif ($changed_files | any(startswith($ctx + "/"))) then "Changes detected in service context: " + $ctx
+                      else ""
+                      end
+                    ) as $reason
+                  | select($reason != "")
+                  | .reason = $reason
+                )
+              | { include: . }
             ' compose.json
           )
+
+          echo "Selected services for build matrix:"
+          echo "$matrix" | jq -r '.include[] | "- \(.primary_service) (services: \(.services)) because: \(.reason)"'
 
           has_builds=$(echo "$matrix" | jq -r '.include | length > 0')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
@@ -212,6 +170,8 @@ jobs:
             TAGS="${TAGS},${IMAGE_NAME}:latest"
           fi
 
+          echo "Building service(s): ${{ matrix.services }}"
+          echo "Reason: ${{ matrix.reason }}"
           echo "image=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
