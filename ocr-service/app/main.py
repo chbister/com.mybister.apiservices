@@ -7,7 +7,7 @@ import io
 import json
 import asyncio
 import ulid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Union, Dict, Any
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 APP_TITLE = "OCR Service"
 app = FastAPI(title=APP_TITLE)
+START_TIME = datetime.now(timezone.utc)
 
 # Configuration
 OCR_ENGINE_TYPE = os.getenv("OCR_ENGINE", "EASYOCR").upper()
@@ -165,6 +166,7 @@ def health():
         "status": "ok",
         "service": "ocr",
         "hostname": socket.gethostname(),
+        "start_time": START_TIME.isoformat(),
         "datetime": datetime.utcnow().isoformat(),
         "config": {
             "ocr_engine": OCR_ENGINE_TYPE,
