@@ -164,7 +164,7 @@ services:
       - "8080:8080" # Dashboard
     volumes:
       - "/Users/christianbister/.orbstack/run/docker.sock:/var/run/docker.sock:ro"
-    profiles: [ "dev" ]
+    profiles: [ "dev", "kickfriends-dev" ]
     restart: unless-stopped
     networks:
       - edge
