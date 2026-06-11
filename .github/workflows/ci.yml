@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest httpx qrcode pillow
+
+      - name: Build services
+        run: |
+          docker compose --profile dev build
+
+      - name: Start services
+        run: |
+          docker network create dev-shared-network || true
+          docker compose --profile dev up -d
+
+      - name: Wait for services to be ready
+        run: |
+          # Basic wait for Traefik and services to initialize
+          sleep 30
+          docker compose --profile dev ps
+
+      - name: Run Integration Tests
+        run: |
+          pytest tests/test_services.py
+        env:
+          TEST_BASE_URL: http://localhost:80
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          docker compose --profile dev logs
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose --profile dev down -v
+          docker network rm dev-shared-network || true
