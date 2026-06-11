@@ -165,6 +165,7 @@ services:
     volumes:
       - "/Users/christianbister/.orbstack/run/docker.sock:/var/run/docker.sock:ro"
     profiles: [ "dev" ]
+    restart: unless-stopped
     networks:
       - edge
 
