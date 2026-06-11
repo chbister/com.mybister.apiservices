@@ -3,9 +3,11 @@ import httpx
 import time
 import os
 
-BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:80")
+BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost")
 
 SERVICES = [
+    "ocr",
+    "extraction",
     "asr-tiny",
     "sentiment",
     "emotion-nuance",
@@ -37,6 +39,29 @@ def test_service_health(service):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
+
+
+def test_ocr_scan():
+    """E2E test for barcode service."""
+    url = f"{BASE_URL}/ocr/v1/ocr"
+    # Using a known QR code image URL or local file
+    # For CI, it's better to use a local file if possible, or a very reliable URL.
+    # Let's use a simple data URL or a mock if we don't have a file yet.
+    # Actually, let's just use the requirement to have tests/data/
+
+    image_path = "tests/data/ocr_test.png"
+    # If image doesn't exist, we skip or fail.
+    # I will create a small QR code image in the next step.
+    if not os.path.exists(image_path):
+        pytest.skip("Test image not found")
+
+    with open(image_path, "rb") as f:
+        files = {"file": ("ocr_test.png", f, "image/png")}
+        response = httpx.post(url, files=files, timeout=30.0)
+
+    assert response.status_code == 202
+    data = response.json()
+    assert "job_id" in data
 
 def test_sentiment_analysis():
     """E2E test for sentiment service."""
