@@ -22,19 +22,6 @@ SERVICES = [
 def test_service_health(service):
     """Verify that every service exposing a health endpoint returns HTTP 200."""
     url = f"{BASE_URL}/{service}/health"
-    # The development Traefik might need a few seconds to register services
-    max_retries = 5
-    for i in range(max_retries):
-        try:
-            response = httpx.get(url, timeout=10.0)
-            if response.status_code == 200:
-                data = response.json()
-                assert data["status"] == "ok"
-                return
-        except Exception:
-            pass
-        time.sleep(2)
-    
     response = httpx.get(url, timeout=10.0)
     assert response.status_code == 200
     data = response.json()

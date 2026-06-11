@@ -33,17 +33,13 @@ jobs:
           docker network create dev-shared-network || true
           docker compose --profile dev up -d
 
-      - name: Wait for services to be ready
-        run: |
-          # Basic wait for Traefik and services to initialize
-          sleep 120
-          docker compose --profile dev ps
-
       - name: Run Integration Tests
         run: |
-          pytest tests/test_services.py
+          pytest -s tests/test_services.py
         env:
           TEST_BASE_URL: http://localhost:80
+          SERVICE_STARTUP_TIMEOUT: 1200
+          SERVICE_POLL_INTERVAL: 5
 
       - name: Collect Docker logs on failure
         if: failure()
