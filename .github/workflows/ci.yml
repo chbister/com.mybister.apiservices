@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,8 +17,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -33,18 +34,59 @@ jobs:
           docker network create dev-shared-network || true
           docker compose --profile dev up -d
 
+      - name: Show Docker state
+        run: |
+          echo "=== Docker Compose PS ==="
+          docker compose --profile dev ps
+
+          echo ""
+          echo "=== Docker Networks ==="
+          docker network ls
+
+          echo ""
+          echo "=== Docker Compose Config ==="
+          docker compose --profile dev config --services
+
+      - name: Initial routing diagnostics
+        run: |
+          echo "=== Testing Traefik routing ==="
+
+          curl -v http://localhost:80/ocr/health || true
+          curl -v http://localhost:80/extraction/health || true
+          curl -v http://localhost:80/asr-tiny/health || true
+          curl -v http://localhost:80/sentiment/health || true
+          curl -v http://localhost:80/emotion-nuance/health || true
+          curl -v http://localhost:80/emotion-vibe/health || true
+          curl -v http://localhost:80/emotion-state/health || true
+          curl -v http://localhost:80/processor/health || true
+          curl -v http://localhost:80/barcode/health || true
+          curl -v http://localhost:80/callback-tester/health || true
+
       - name: Run Integration Tests
         run: |
-          pytest -s tests/test_services.py
+          pytest -vv -s tests/test_services.py
         env:
           TEST_BASE_URL: http://localhost:80
           SERVICE_STARTUP_TIMEOUT: 1200
           SERVICE_POLL_INTERVAL: 5
 
-      - name: Collect Docker logs on failure
-        if: failure()
+      - name: Show Docker state after tests
+        if: always()
         run: |
-          docker compose --profile dev logs
+          echo "=== Docker Compose PS ==="
+          docker compose --profile dev ps
+
+      - name: Collect Traefik logs
+        if: always()
+        run: |
+          echo "=== Traefik Logs ==="
+          docker compose --profile dev logs traefik || true
+
+      - name: Collect Docker logs
+        if: always()
+        run: |
+          echo "=== All Container Logs ==="
+          docker compose --profile dev logs --timestamps
 
       - name: Cleanup
         if: always()
