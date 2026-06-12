@@ -2,3 +2,18 @@ services:
   traefik-dev:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+  sentiment-dev:
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+
+  emotion-nuance-dev:
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+
+  emotion-vibe-dev:
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
+
+  emotion-state-dev:
+    environment:
+      HF_TOKEN: ${HF_TOKEN}
