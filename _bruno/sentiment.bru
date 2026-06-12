@@ -1,11 +1,11 @@
 meta {
   name: sentiment
   type: http
-  seq: 5
+  seq: 4
 }
 
 post {
-  url: https://gateway-dev.commybisterapiservices.orb.local/sentiment/v1/sentiment
+  url: {{baseUrl}}/sentiment/v1/sentiment
   body: json
   auth: inherit
 }

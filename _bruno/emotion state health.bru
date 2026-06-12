@@ -1,11 +1,11 @@
 meta {
   name: emotion state health
   type: http
-  seq: 16
+  seq: 15
 }
 
 get {
-  url: https://gateway-dev.commybisterapiservices.orb.local/emotion-state/health
+  url: {{baseUrl}}/emotion-state/health
   body: json
   auth: inherit
 }

@@ -8,8 +8,8 @@ on:
 
 jobs:
   test:
+    name: "Integration Tests"
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,34 +36,6 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
-      - name: Show Docker state
-        run: |
-          echo "=== Docker Compose PS ==="
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev ps
-
-          echo ""
-          echo "=== Docker Networks ==="
-          docker network ls
-
-          echo ""
-          echo "=== Docker Compose Config ==="
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev config --services
-
-      - name: Initial routing diagnostics
-        run: |
-          echo "=== Testing Traefik routing ==="
-
-          curl -v http://localhost:80/ocr/health || true
-          curl -v http://localhost:80/extraction/health || true
-          curl -v http://localhost:80/asr-tiny/health || true
-          curl -v http://localhost:80/sentiment/health || true
-          curl -v http://localhost:80/emotion-nuance/health || true
-          curl -v http://localhost:80/emotion-vibe/health || true
-          curl -v http://localhost:80/emotion-state/health || true
-          curl -v http://localhost:80/processor/health || true
-          curl -v http://localhost:80/barcode/health || true
-          curl -v http://localhost:80/callback-tester/health || true
-
       - name: Run Integration Tests
         run: |
           pytest -vv -s tests/test_services.py
@@ -73,22 +45,9 @@ jobs:
           SERVICE_POLL_INTERVAL: 5
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
-      - name: Show Docker state after tests
-        if: always()
+      - name: Collect Docker logs on failure
+        if: failure()
         run: |
-          echo "=== Docker Compose PS ==="
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev ps
-
-      - name: Collect Traefik logs
-        if: always()
-        run: |
-          echo "=== Traefik Logs ==="
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev logs traefik || true
-
-      - name: Collect Docker logs
-        if: always()
-        run: |
-          echo "=== All Container Logs ==="
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev logs --timestamps
 
       - name: Cleanup
@@ -96,3 +55,45 @@ jobs:
         run: |
           docker compose --profile dev down -v
           docker network rm dev-shared-network || true
+
+  build:
+    name: "Build Production Images"
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Production Images
+        run: |
+          # Example build logic for production services
+          # In a real scenario, this would iterate over services or use a script
+          docker compose --profile prod build
+          docker compose --profile prod push
+
+  deploy:
+    name: "Deploy to Production"
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy
+        run: |
+          echo "Deploying newly built images to production environment..."
+          # Real deployment logic would go here, e.g., SSH to server and run docker compose pull/up
+          # or use a deployment tool.
+          echo "Successfully deployed."

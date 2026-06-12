@@ -1,11 +1,11 @@
 meta {
   name: sentiment health
   type: http
-  seq: 6
+  seq: 5
 }
 
 get {
-  url: https://gateway-dev.commybisterapiservices.orb.local/sentiment/health
+  url: {{baseUrl}}/sentiment/health
   body: none
   auth: inherit
 }

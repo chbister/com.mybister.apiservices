@@ -1,11 +1,11 @@
 meta {
   name: processor health
   type: http
-  seq: 17
+  seq: 16
 }
 
 get {
-  url: https://gateway-dev.commybisterapiservices.orb.local/processor/health
+  url: {{baseUrl}}/processor/health
   body: none
   auth: inherit
 }
