@@ -27,17 +27,17 @@ jobs:
 
       - name: Build services
         run: |
-          docker compose --profile dev build
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev build
 
       - name: Start services
         run: |
           docker network create dev-shared-network || true
-          docker compose --profile dev up -d
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev up -d
 
       - name: Show Docker state
         run: |
           echo "=== Docker Compose PS ==="
-          docker compose --profile dev ps
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev ps
 
           echo ""
           echo "=== Docker Networks ==="
@@ -45,7 +45,7 @@ jobs:
 
           echo ""
           echo "=== Docker Compose Config ==="
-          docker compose --profile dev config --services
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev config --services
 
       - name: Initial routing diagnostics
         run: |
@@ -74,19 +74,19 @@ jobs:
         if: always()
         run: |
           echo "=== Docker Compose PS ==="
-          docker compose --profile dev ps
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev ps
 
       - name: Collect Traefik logs
         if: always()
         run: |
           echo "=== Traefik Logs ==="
-          docker compose --profile dev logs traefik || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev logs traefik || true
 
       - name: Collect Docker logs
         if: always()
         run: |
           echo "=== All Container Logs ==="
-          docker compose --profile dev logs --timestamps
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev logs --timestamps
 
       - name: Cleanup
         if: always()
