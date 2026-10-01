@@ -6,6 +6,7 @@ import os
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost")
 
 SERVICES = [
+    "tts",
     "ocr",
     "extraction",
     "asr-tiny",

@@ -1,4 +1,5 @@
 x-common-env: &common-env
+  HF_HOME: "/root/.cache/huggingface"
   HF_TOKEN: "${HF_TOKEN:-}"
   CALLBACK_AUTH_SECRET: "${CALLBACK_AUTH_SECRET:-}"
   REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
@@ -27,6 +28,80 @@ x-asr-base: &asr-base
 
 services:
   # --- PRODUCTION SERVICES (Profile: prod) ---
+  tts:
+    image: ghcr.io/chbister/tts:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.tts.rule=Host(`ask.mybister.com`) && PathPrefix(`/tts`)"
+      - "traefik.http.routers.tts.entrypoints=websecure"
+      - "traefik.http.routers.tts.tls=true"
+      - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tts.middlewares=apikey-auth,tts-strip"
+      - "traefik.http.middlewares.tts-strip.stripprefix.prefixes=/tts"
+      - "traefik.http.services.tts.loadbalancer.server.port=8000"
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      # TTS_MODEL_NAME: "tts_models/multilingual/multi-dataset/xtts_v2"
+      TTS_MODEL_ROOT: "/root/.cache/huggingface/hub/models--coqui--XTTS-v2"
+      TTS_DEFAULT_VOICE: "samples/de_sample.wav"
+      TTS_LOAD_MAX_RETRIES: "5"
+      TTS_LOAD_INITIAL_DELAY: "10.0"
+      COQUI_TOS_AGREED: "1"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - tts-link
+
+  tts-image-builder:
+    build:
+      context: ./tts-service
+    image: ghcr.io/chbister/tts:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service tts-image-builder is only for building the image"]
+    restart: "no"
+
+  tts-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.tts-dev.rule=PathPrefix(`/tts`)"
+      - "traefik.http.routers.tts-dev.entrypoints=web"
+      - "traefik.http.routers.tts-dev.middlewares=tts-strip"
+      - "traefik.http.middlewares.tts-strip.stripprefix.prefixes=/tts"
+      - "traefik.http.services.tts-dev.loadbalancer.server.port=8000"
+    build:
+      context: ./tts-service
+    image: tts:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      UVICORN_RELOAD: "1"
+      # TTS_MODEL_NAME: "tts_models/multilingual/multi-dataset/xtts_v2"
+      TTS_MODEL_ROOT: "/root/.cache/huggingface/hub/models--coqui--XTTS-v2"
+      TTS_DEFAULT_VOICE: "samples/de_sample.wav"
+      TTS_DEVICE: "cpu"
+      TTS_LOAD_MAX_RETRIES: "5"
+      TTS_LOAD_INITIAL_DELAY: "10.0"
+      COQUI_TOS_AGREED: "1"
+    volumes:
+      - ./tts-service/app:/srv/app:rw
+      - hf_cache:/root/.cache/huggingface
+    profiles: [ "dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - tts-link
+
   apikey-auth:
     image: ghcr.io/chbister/com.mybister.forwardauthservice:latest
     environment:
