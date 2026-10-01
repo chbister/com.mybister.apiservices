@@ -455,7 +455,12 @@ async def lifespan(app: FastAPI):
     # Startup
     global tts_manager
     tts_manager = TTSManager()
-    tts_manager.load_model()
+    try:
+        tts_manager.load_model()
+    except Exception as e:
+        logger.error(f"Failed to load model during startup: {e}")
+        # We don't raise here to allow the service to start and respond to health checks
+        # The service will return 503 for TTS requests if the model is not loaded
     yield
     # Shutdown
     pass
@@ -561,8 +566,8 @@ async def generate_speech(
         logger.info(f"Starting synthesis: {synthesis_start}")
         logger.info(f"Text: {text}")
         try:
-            if not tts_manager:
-                raise HTTPException(status_code=503, detail="TTS service not ready")
+            if not tts_manager or not tts_manager.model:
+                raise HTTPException(status_code=503, detail="TTS service not ready (model not loaded)")
 
             # For VITS mode (CPU fallback), don't pass speaker_wav as voice cloning isn't supported
             vits_mode = not tts_manager.has_gpu and os.getenv("TTS_FORCE_CPU") != "true"
@@ -601,8 +606,9 @@ async def generate_speech(
 @app.get("/health")
 def health():
     return {
-        "status": "ok" if tts_manager and tts_manager.model else "initializing",
+        "status": "ok",
         "service": "tts-service",
+        "ready": tts_manager is not None and tts_manager.model is not None,
         "model": tts_manager.active_model_name if tts_manager else None,
         "device": tts_manager.device if tts_manager else "unknown",
         "has_gpu": tts_manager.has_gpu if tts_manager else None,
