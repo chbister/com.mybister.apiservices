@@ -11,6 +11,7 @@ BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost")
 
 # List of services to check for readiness
 SERVICES = [
+    "tts",
     "ocr",
     "extraction",
     "asr-tiny",
