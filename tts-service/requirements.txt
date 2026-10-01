@@ -1,0 +1,17 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.6
+PyPDF2==3.0.1
+httpx==0.28.1
+python-ulid==3.0.0
+numpy<2.0.0
+scipy==1.11.4
+pydantic[email]==2.10.6
+python-ulid==3.0.0
+TTS==0.22.0
+torch==2.1.2
+torchaudio==2.1.2
+transformers==4.33.3
+tokenizers==0.13.3
+# torch and torchaudio are installed in Dockerfile to ensure CPU-only versions
