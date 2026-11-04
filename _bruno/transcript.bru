@@ -1,0 +1,42 @@
+meta {
+  name: transcript (merge)
+  type: http
+  seq: 51
+}
+
+post {
+  url: {{baseUrl}}/processor/v1/transcript
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:raw {
+  {
+    "asr_result": {
+      "text": "Hallo, wie geht es dir? Gut, und selbst?",
+      "language": "de",
+      "segments": [
+        {"start": 0.0, "end": 6.0, "text": "Hallo, wie geht es dir?"},
+        {"start": 6.0, "end": 14.0, "text": "Gut, und selbst?"}
+      ]
+    },
+    "diarization": {
+      "speakers": [
+        {"start": 0.0, "end": 10.0, "speaker": "SPEAKER_00"},
+        {"start": 10.0, "end": 20.0, "speaker": "SPEAKER_01"}
+      ],
+      "number_speakers": 2
+    },
+    "speaker_names": {"SPEAKER_00": "Anna", "SPEAKER_01": "Bernd"},
+    "format": "json"
+  }
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

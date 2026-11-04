@@ -104,6 +104,8 @@ services:
 
   apikey-auth:
     image: ghcr.io/chbister/com.mybister.forwardauthservice:latest
+    platform: linux/amd64
+    profiles: [ "prod", "kickfriends-prod", "careergraph-prod" ]
     environment:
       API_KEY: ${API_KEY}
     labels:
@@ -239,7 +241,7 @@ services:
       - "8080:8080" # Dashboard
     volumes:
       - "/Users/christianbister/.orbstack/run/docker.sock:/var/run/docker.sock:ro"
-    profiles: [ "dev", "kickfriends-dev" ]
+    profiles: [ "dev", "kickfriends-dev", "careergraph-dev" ]
     restart: unless-stopped
     networks:
       - edge
@@ -437,6 +439,60 @@ services:
       app:
         aliases:
           - diarization-link
+
+  convert:
+    image: ghcr.io/chbister/convert:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.convert.rule=Host(`ask.mybister.com`) && PathPrefix(`/convert`)"
+      - "traefik.http.routers.convert.entrypoints=websecure"
+      - "traefik.http.routers.convert.tls=true"
+      - "traefik.http.routers.convert.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.convert.middlewares=apikey-auth,convert-strip"
+      - "traefik.http.middlewares.convert-strip.stripprefix.prefixes=/convert"
+      - "traefik.http.services.convert.loadbalancer.server.port=8000"
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      UVICORN_WORKERS: "2"
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      - edge
+
+  convert-image-builder:
+    build:
+      context: ./convert-service
+    image: ghcr.io/chbister/convert:latest
+    profiles: [ "builder" ]
+    entrypoint: ["echo", "Service convert-image-builder is only for building the image"]
+    restart: "no"
+
+  convert-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.convert-dev.rule=PathPrefix(`/convert`)"
+      - "traefik.http.routers.convert-dev.entrypoints=web"
+      - "traefik.http.routers.convert-dev.middlewares=convert-strip"
+      - "traefik.http.middlewares.convert-strip.stripprefix.prefixes=/convert"
+      - "traefik.http.services.convert-dev.loadbalancer.server.port=8000"
+    build:
+      context: ./convert-service
+    image: convert:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
+    volumes:
+      - ./convert-service/app:/srv/app:rw
+    profiles: [ "dev" ]
+    networks:
+      - edge
 
   # gateway:
   #   image: nginx:alpine
@@ -820,6 +876,71 @@ services:
         aliases:
           - extraction-link
 
+  resume:
+    image: ghcr.io/chbister/resume:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.resume.rule=Host(`ask.mybister.com`) && PathPrefix(`/resume`)"
+      - "traefik.http.routers.resume.entrypoints=websecure"
+      - "traefik.http.routers.resume.tls=true"
+      - "traefik.http.routers.resume.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.resume.middlewares=apikey-auth,resume-strip"
+      - "traefik.http.middlewares.resume-strip.stripprefix.prefixes=/resume"
+      - "traefik.http.services.resume.loadbalancer.server.port=8000"
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      RESUME_NER_ENABLED: "false"
+      RESUME_NER_MODEL_ID: "Davlan/xlm-roberta-base-ner-hrl"
+    restart: unless-stopped
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    profiles: [ "prod", "careergraph-prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - resume-link
+
+  resume-image-builder:
+    build:
+      context: ./resume-service
+    image: ghcr.io/chbister/resume:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service resume-image-builder is only for building the image"]
+    restart: "no"
+
+  resume-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.resume-dev.rule=PathPrefix(`/resume`)"
+      - "traefik.http.routers.resume-dev.entrypoints=web"
+      - "traefik.http.routers.resume-dev.middlewares=resume-strip"
+      - "traefik.http.middlewares.resume-strip.stripprefix.prefixes=/resume"
+      - "traefik.http.services.resume-dev.loadbalancer.server.port=8000"
+    build:
+      context: ./resume-service
+    image: resume:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      RESUME_NER_ENABLED: "false"
+      RESUME_NER_MODEL_ID: "Davlan/xlm-roberta-base-ner-hrl"
+      UVICORN_RELOAD: "1"
+    volumes:
+      - ./resume-service/app:/srv/app:rw
+      - hf_cache:/root/.cache/huggingface
+    profiles: [ "dev", "careergraph-dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - resume-link
+
   ocr:
     image: ghcr.io/chbister/ocr:latest
     labels:
@@ -841,13 +962,14 @@ services:
       OCR_LANG: de,en
       OCR_MAX_IMAGE_WIDTH: 1600
       OCR_MAX_IMAGE_HEIGHT: 3000
+      OCR_MAX_PAGES: "10"
       OCR_JOBS_DIR: "/srv/jobs"
     restart: unless-stopped
     volumes:
       - hf_cache:/root/.cache
       - paddle_cache:/root/.paddlex
       - ocr_jobs:/srv/jobs
-    profiles: [ "prod", "kickfriends-prod" ]
+    profiles: [ "prod", "kickfriends-prod", "careergraph-prod" ]
     networks:
       edge:
       app:
@@ -864,6 +986,7 @@ services:
       OCR_LANG: de,en
       OCR_MAX_IMAGE_WIDTH: 1600
       OCR_MAX_IMAGE_HEIGHT: 3000
+      OCR_MAX_PAGES: "10"
       OCR_PROCESSING_TIMEOUT: 120
       OCR_REQUEUE_STALE_PROCESSING_JOBS: "true"
       OCR_JOBS_DIR: "/srv/jobs"
@@ -871,7 +994,7 @@ services:
     volumes:
       - paddle_cache:/root/.paddlex
       - ocr_jobs:/srv/jobs
-    profiles: [ "prod", "kickfriends-prod" ]
+    profiles: [ "prod", "kickfriends-prod", "careergraph-prod" ]
     networks:
       - app
 
@@ -904,13 +1027,14 @@ services:
       UVICORN_RELOAD: "1"
       OCR_ENGINE: EASYOCR
       OCR_LANG: de,en
+      OCR_MAX_PAGES: "10"
       OCR_JOBS_DIR: "/srv/jobs"
     volumes:
       - ./ocr-service/app:/srv/app:rw
       - hf_cache:/root/.cache
       - paddle_cache:/root/.paddlex
       - ocr_jobs:/srv/jobs
-    profiles: [ "dev", "kickfriends-dev" ]
+    profiles: [ "dev", "kickfriends-dev", "careergraph-dev" ]
     networks:
       edge:
       app:
@@ -928,6 +1052,7 @@ services:
       OCR_LANG: de,en
       OCR_MAX_IMAGE_WIDTH: 1600
       OCR_MAX_IMAGE_HEIGHT: 3000
+      OCR_MAX_PAGES: "10"
       OCR_PROCESSING_TIMEOUT: 120
       OCR_REQUEUE_STALE_PROCESSING_JOBS: "true"
       OCR_JOBS_DIR: "/srv/jobs"
@@ -935,7 +1060,7 @@ services:
       - ./ocr-service/app:/srv/app:rw
       - paddle_cache:/root/.paddlex
       - ocr_jobs:/srv/jobs
-    profiles: [ "dev", "kickfriends-dev" ]
+    profiles: [ "dev", "kickfriends-dev", "careergraph-dev" ]
     networks:
       - app
 

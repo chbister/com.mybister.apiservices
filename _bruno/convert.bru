@@ -1,0 +1,28 @@
+meta {
+  name: convert
+  type: http
+  seq: 52
+}
+
+post {
+  url: {{baseUrl}}/convert/v1/convert
+  body: multipartForm
+  auth: inherit
+}
+
+headers {
+  Content-Type: multipart/form-data
+}
+
+body:multipart-form {
+  format: wav
+  sample_rate: 16000
+  mono: true
+  ~file: @file(/Users/christianbister/Downloads/sample.mp3)
+  ~file_url: https://example.com/audio.m4a
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}

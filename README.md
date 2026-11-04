@@ -31,6 +31,27 @@ Supports `tiny`, `small`, `medium`, and `large-v3` models.
     - **Async Mode**: Automatically switches to background processing for files > 5 minutes.
     - **Push Method**: Optional `callback_url` for webhooks. Supports `CALLBACK_AUTH_SECRET` for Bearer token authentication.
 - **Status/Download**: `GET /asr-<model>/v1/asr/status/{job_id}` and `GET /asr-<model>/v1/asr/download/{job_id}`.
+- **GPU Endpoint (lokal)**: `POST /asr-<model>/v1/asr/gpu` – same contract, but transcribes with
+  [mlx-whisper](https://github.com/ml-explore/mlx-whisper) on the Apple GPU (ctranslate2 is CPU-only
+  on macOS). Supports `model_size` (`tiny|small|medium|large-v3` or a full HF repo) and
+  `word_timestamps` (word-level timestamps à la WhisperX). Run it outside Docker via
+  `make local-asr` (see "Local GPU runs" below).
+
+### 2b. Diarization (Speaker)
+- **Speaker check**: `POST /diarization/v1/speaker-check` – returns only `multi_speaker` + `number_speakers`.
+- **Full timeline**: `POST /diarization/v1/diarize` – returns the complete speaker timeline:
+  `{"speakers": [{"start": 72.1, "end": 76.4, "speaker": "SPEAKER_00"}, ...],
+  "number_speakers": 2, "multi_speaker": true, "metadata": {...}}`
+- **Status/Download**: `GET /diarization/v1/diarize/status/{job_id}` and `.../download/{job_id}`
+  (same job storage as `speaker-check`).
+- Audio decoding works without host ffmpeg (soundfile → PyAV → pydub fallback chain).
+
+### 2c. Convert (ffmpeg, container-only)
+- **Endpoint**: `POST /convert/v1/convert` – converts audio and returns it as a binary response.
+- **Params**: `file` | `file_url`, `format` (`wav|mp3|flac|ogg|m4a`, default `wav`),
+  `sample_rate` (default `16000`), `mono` (default `true`).
+- **Response headers**: `X-Original-Name`, `X-Duration-Seconds`, `X-Sample-Rate`, `X-Channels`.
+- ffmpeg lives only inside this container – the host never needs it.
 
 ### 3. Analysis Services (Multilingual)
 - **Sentiment**: `POST /sentiment/v1/sentiment`
@@ -42,6 +63,17 @@ Supports `tiny`, `small`, `medium`, and `large-v3` models.
 Combines ASR results with all analysis services.
 - **Endpoint**: `POST /processor/v1/process`
 - **Logic**: It accepts an ASR JSON, processes segments in parallel, and returns a fully enriched "Voice Diary" object.
+- **Transcript endpoint**: `POST /processor/v1/transcript` – merges ASR segments with the
+  diarization timeline into a speaker protocol:
+  - Input: `asr_result` (answer of `/v1/asr`) + `diarization` (answer of `/v1/diarize`), or flat
+    `segments` + `turns`; optional `speaker_names` (`{"SPEAKER_00": "Anna"}`) and
+    `format` (`json` | `text`).
+  - Output: `segments` (with `speaker`, split at speaker changes), `utterances` (grouped),
+    `speakers` (summary) and `transcript`:
+    ```text
+    [00:01:12] Anna: Wann hat das Gespräch begonnen?
+    [00:01:16] Sprecher 2: Kurz nach neun.
+    ```
 
 ### 5. Barcode Service
 - **Endpoint**: `POST /barcode/v1/barcode`
@@ -86,3 +118,55 @@ make up-prod
 
 ### Checking Status
 Each service has a `/health` endpoint that returns the **hostname/container ID**, which is useful for verifying load balancing or gateway routing.
+
+---
+
+## 🍎 Local GPU Runs (no Docker)
+
+> **Step-by-step guide (German):** [docs/transkription-anleitung.md](docs/transkription-anleitung.md)
+> – complete walkthrough from audio file to speaker protocol, incl. timing measurements.
+
+Docker on macOS has no GPU access, so the GPU-capable endpoints are started directly on the host.
+Only Python libraries and models are required – no additional applications (ffmpeg stays in the
+`convert` container).
+
+### One-time setup
+```bash
+pip install -r requirements-local.txt   # pyannote 3.3.1 (Docker parity) + mlx-whisper
+pip install python-ulid pytest          # if not already present in the venv
+```
+Models are downloaded lazily on first use (Whisper via mlx-community, pyannote 3.1 via HF_TOKEN).
+
+### Start services (one terminal each)
+```bash
+make local-asr           # POST /v1/asr + /v1/asr/gpu        → http://127.0.0.1:8100
+make local-diarization   # POST /v1/speaker-check + /v1/diarize → http://127.0.0.1:8101
+make local-processor     # POST /v1/process + /v1/transcript   → http://127.0.0.1:8102
+```
+
+### End-to-end example (audio → speaker protocol)
+```bash
+# 1) Transkription auf der Apple-GPU
+curl -X POST http://127.0.0.1:8100/v1/asr/gpu \
+  -F "file=@meeting.m4a" -F "language=de" -F "word_timestamps=false" -o asr.json
+
+# 2) Sprecher-Zeitlinie
+curl -X POST http://127.0.0.1:8101/v1/diarize \
+  -F "file=@meeting.m4a" -o diar.json
+
+# 3) Merge zum Protokoll
+curl -X POST http://127.0.0.1:8102/v1/transcript \
+  -H "Content-Type: application/json" \
+  -d "{\"asr_result\": $(cat asr.json), \"diarization\": $(cat diar.json),
+       \"speaker_names\": {\"SPEAKER_00\": \"Anna\"}, \"format\": \"text\"}"
+```
+
+### Notes
+- **GPU**: Only `mlx-whisper` uses the Apple GPU; `faster-whisper`/ctranslate2 is CPU-only on macOS.
+  Diarization runs on CPU (MPS is supported but slower for pyannote).
+- **ffmpeg**: Not installed on the host. The GPU endpoints decode audio via `soundfile`/`PyAV`
+  (bundled ffmpeg libs). For converting files, use the `convert` container.
+- **Docker parity**: `requirements-local.txt` pins the same pyannote/torch versions as
+  `diarization-service/requirements.txt`, so local and container results match.
+- **Docker vs. local**: `/v1/asr/gpu` also exists in the container and returns a clear error there
+  (mlx-whisper is intentionally not part of the Docker image).

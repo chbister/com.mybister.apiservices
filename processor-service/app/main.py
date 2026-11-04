@@ -9,7 +9,10 @@ from typing import List, Dict, Any, Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
+
+from app.transcript import build_transcript
 
 logging.basicConfig(
     level=logging.INFO,
@@ -141,3 +144,115 @@ async def process_asr_result(asr_result: AsrResultIn):
             "processor_hostname": socket.gethostname(),
             "processed_at": datetime.utcnow().isoformat()
         }
+
+
+# ===========================================================================
+# /v1/transcript - neue Route: fusioniert ASR-Segmente mit Diarization-Turns
+# zu einem Sprecher-Protokoll. Rein JSON-basiert, keine neuen Abhaengigkeiten.
+# Der bestehende /v1/process-Endpunkt bleibt unveraendert.
+# ===========================================================================
+
+
+class TranscriptSegmentIn(BaseModel):
+    start: float
+    end: float
+    text: str = ""
+
+
+class TranscriptTurnIn(BaseModel):
+    start: float
+    end: float
+    speaker: str
+
+
+class TranscriptRequest(BaseModel):
+    # Variante A: komplette Antwort-Objekte der beiden anderen Services
+    asr_result: Optional[Dict[str, Any]] = None        # Antwort von POST /v1/asr
+    diarization: Optional[Dict[str, Any]] = None       # Antwort von POST /v1/diarize
+    # Variante B: flache Listen
+    segments: Optional[List[TranscriptSegmentIn]] = None
+    turns: Optional[List[TranscriptTurnIn]] = None
+    # Optionen
+    speaker_names: Optional[Dict[str, str]] = None     # {"SPEAKER_00": "Anna"}
+    format: str = "json"                               # "json" | "text"
+
+
+def _extract_segments(req: TranscriptRequest) -> List[Dict[str, Any]]:
+    if req.segments is not None:
+        return [s.model_dump() for s in req.segments]
+    if req.asr_result is not None:
+        raw = req.asr_result.get("segments")
+        if raw is None:
+            raise HTTPException(
+                status_code=400,
+                detail="asr_result muss ein 'segments'-Array enthalten.",
+            )
+        try:
+            return [
+                {"start": float(s["start"]), "end": float(s["end"]),
+                 "text": str(s.get("text") or "")}
+                for s in raw
+            ]
+        except (KeyError, TypeError, ValueError) as e:
+            raise HTTPException(
+                status_code=400, detail=f"Ungueltiges asr_result.segments: {e}"
+            )
+    raise HTTPException(
+        status_code=400,
+        detail="Entweder 'segments' oder 'asr_result' muss uebergeben werden.",
+    )
+
+
+def _extract_turns(req: TranscriptRequest) -> List[Dict[str, Any]]:
+    if req.turns is not None:
+        return [t.model_dump() for t in req.turns]
+    if req.diarization is not None:
+        raw = req.diarization.get("speakers")
+        if raw is None:
+            raise HTTPException(
+                status_code=400,
+                detail="diarization muss ein 'speakers'-Array enthalten.",
+            )
+        try:
+            return [
+                {"start": float(t["start"]), "end": float(t["end"]),
+                 "speaker": str(t["speaker"])}
+                for t in raw
+            ]
+        except (KeyError, TypeError, ValueError) as e:
+            raise HTTPException(
+                status_code=400, detail=f"Ungueltiges diarization.speakers: {e}"
+            )
+    return []  # ohne Diarization: Sprecher bleiben None, Protokoll ohne Labels
+
+
+@app.post("/v1/transcript")
+async def create_transcript(req: TranscriptRequest):
+    logger.info(
+        "Transcript request (format=%s, speaker_names=%s)",
+        req.format, bool(req.speaker_names),
+    )
+
+    segments = _extract_segments(req)
+    turns = _extract_turns(req)
+
+    language = None
+    if req.asr_result is not None:
+        language = req.asr_result.get("language")
+
+    result = build_transcript(
+        segments, turns, speaker_names=req.speaker_names, language=language
+    )
+    result["metadata"] = {
+        "processor_hostname": socket.gethostname(),
+        "processed_at": datetime.utcnow().isoformat(),
+        "diarization_provided": bool(turns),
+    }
+
+    if (req.format or "json").lower() == "text":
+        return PlainTextResponse(
+            content=result["transcript"],
+            media_type="text/plain; charset=utf-8",
+        )
+
+    return result
