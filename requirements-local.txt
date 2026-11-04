@@ -1,0 +1,25 @@
+# Lokale (nicht-Docker) Laufzeit-Abhängigkeiten für die GPU-fähigen Endpunkte.
+#
+# WICHTIG: Die Docker-Builds verwenden weiterhin unverändert die jeweilige
+# requirements.txt im Service-Verzeichnis. Diese Datei gilt nur für den lokalen
+# Betrieb in der Projekt-.venv (Makefile-Ziele: local-asr, local-diarization,
+# local-processor).
+#
+# Pins = Docker-Parität (siehe diarization-service/requirements.txt), damit
+# lokale und Container-Läufe dieselben Modellversionen nutzen:
+#   - pyannote.audio 3.3.1 + torch 2.3.1 + torchaudio 2.3.1 + numpy 1.26.4
+#     (pyannote 4.x braucht ein gated HF-Repo, das der Account ggf. nicht
+#     freigeschaltet hat – 3.3.1 läuft mit dem bestehenden Token)
+#   - pyannote-core/-database/-metrics: auf <6/<6/<4.2 gezogen, weil diese
+#     Versionen zu numpy 1.26 und pyannote.audio 3.3.1 passen.
+#
+# mlx-whisper: Apple-MLX-Backend für den lokalen GPU-ASR-Endpunkt
+# (/v1/asr/gpu). ctranslate2/faster-whisper ist auf macOS CPU-only!
+pyannote.audio==3.3.1
+torch==2.3.1
+torchaudio==2.3.1
+numpy==1.26.4
+pyannote-core<6
+pyannote-database<6
+pyannote-metrics<4.2
+mlx-whisper

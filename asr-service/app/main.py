@@ -92,6 +92,465 @@ def transcribe_worker(file_path: str, model_size: str, compute_type: str, langua
         return {"success": False, "error": str(e)}
 
 
+# ===========================================================================
+# /v1/asr/gpu - neue Route: lokale GPU-Variante mit Apples MLX-Backend.
+# ctranslate2/faster-whisper ist auf macOS CPU-only, deshalb nutzt dieser
+# Endpunkt mlx-whisper (Metal). Nur lokaler Betrieb (Makefile: local-asr);
+# in Docker fehlt mlx-whisper und der Endpunkt liefert eine klare Meldung.
+# Der bestehende /v1/asr-Endpunkt bleibt unveraendert.
+# ===========================================================================
+
+MLX_MODEL_REPOS = {
+    "tiny": "mlx-community/whisper-tiny-mlx",
+    "small": "mlx-community/whisper-small-mlx",
+    "medium": "mlx-community/whisper-medium-mlx",
+    "large-v3": "mlx-community/whisper-large-v3-mlx",
+}
+
+DEFAULT_GPU_MODEL_SIZE = os.getenv("ASR_GPU_MODEL_SIZE", "small")
+
+
+def resolve_mlx_repo(model_size: str) -> str:
+    """Mappt tiny|small|medium|large-v3 auf ein mlx-community-Repo.
+
+    Vollstaendige Repo-Namen (mit '/') werden durchgereicht.
+    """
+    if model_size in MLX_MODEL_REPOS:
+        return MLX_MODEL_REPOS[model_size]
+    if "/" in model_size:
+        return model_size
+    raise ValueError(
+        f"Unbekannte model_size '{model_size}'. "
+        f"Erlaubt: {', '.join(MLX_MODEL_REPOS)} oder ein vollstaendiger "
+        "HF-Repo-Name (z.B. mlx-community/whisper-small-mlx)."
+    )
+
+
+def load_audio_16k_mono_np(file_path: str):
+    """Dekodiert Audio zu 16 kHz mono float32 (numpy) - ohne system-ffmpeg.
+
+    Reihenfolge: soundfile (wav/flac/ogg/mp3) -> PyAV (m4a/aac/webm/...).
+    """
+    import numpy as np
+
+    try:
+        import soundfile as sf
+
+        samples, sample_rate = sf.read(file_path, dtype="float32", always_2d=True)
+        samples = samples.mean(axis=1)
+        if sample_rate != 16000:
+            from math import gcd
+
+            from scipy.signal import resample_poly
+
+            g = gcd(16000, int(sample_rate))
+            samples = resample_poly(samples, 16000 // g, int(sample_rate) // g).astype(
+                np.float32
+            )
+        return samples
+    except Exception as e:
+        logger.info("soundfile decode failed (%s), trying PyAV...", e)
+
+    import av
+
+    with av.open(file_path) as container:
+        stream = next((s for s in container.streams.audio if s.type == "audio"), None)
+        if stream is None:
+            raise ValueError("No audio stream found in file")
+        resampler = av.AudioResampler(format="fltp", layout="mono", rate=16000)
+        chunks = []
+        for frame in container.decode(stream):
+            for out_frame in resampler.resample(frame):
+                chunks.append(out_frame.to_ndarray().astype(np.float32).reshape(-1))
+        for out_frame in resampler.resample(None):
+            chunks.append(out_frame.to_ndarray().astype(np.float32).reshape(-1))
+    return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
+
+
+def audio_duration_sec(file_path: str) -> Optional[float]:
+    """Audiodauer via PyAV (funktioniert ohne system-ffmpeg)."""
+    try:
+        import av
+
+        with av.open(file_path) as container:
+            stream = next((s for s in container.streams if s.type == "audio"), None)
+            if stream is not None and stream.duration is not None:
+                return float(stream.duration * stream.time_base)
+            if container.duration is not None:
+                return float(container.duration) / 1_000_000.0
+    except Exception as e:
+        logger.warning("Could not detect duration via PyAV: %s", e)
+    return None
+
+
+def transcribe_worker_gpu(
+    file_path: str,
+    model_size: str,
+    compute_type: str,
+    language: Optional[str],
+    vad_filter: bool,
+    timestamps: bool,
+    file_name: Optional[str] = None,
+    file_url: Optional[str] = None,
+    word_timestamps: bool = False,
+):
+    """Transkription mit mlx-whisper auf der Apple-GPU (separater Prozess).
+
+    Signatur analog zu transcribe_worker, damit run_async_job_gpu die
+    ueblichen Job-/Callback-Routinen wiederverwenden kann. 'compute_type'
+    und 'vad_filter' werden vom MLX-Backend nicht unterstuetzt (siehe metadata).
+    """
+    start_time = time.time()
+    try:
+        try:
+            import mlx_whisper
+        except ImportError:
+            return {
+                "success": False,
+                "error": (
+                    "mlx-whisper ist nicht installiert. Der GPU-Endpunkt "
+                    "/v1/asr/gpu ist nur fuer den lokalen Betrieb gedacht "
+                    "(pip install -r requirements-local.txt)."
+                ),
+            }
+
+        repo = resolve_mlx_repo(model_size)
+        audio = load_audio_16k_mono_np(file_path)
+        if audio.shape[0] == 0:
+            return {"success": False, "error": "Audio file contains no samples."}
+
+        result = mlx_whisper.transcribe(
+            audio,
+            path_or_hf_repo=repo,
+            language=None if (language or "").lower() == "auto" else language,
+            word_timestamps=bool(word_timestamps),
+            verbose=None,
+        )
+
+        seg_list = []
+        full_text_parts = []
+        raw_segments = result.get("segments") or []
+        for s in raw_segments:
+            txt = (s.get("text") or "").strip()
+            if txt:
+                full_text_parts.append(txt)
+            if timestamps:
+                entry = {
+                    "start": float(s.get("start", 0.0)),
+                    "end": float(s.get("end", 0.0)),
+                    "text": txt,
+                }
+                if word_timestamps and s.get("words"):
+                    entry["words"] = [
+                        {
+                            "word": str(w.get("word", "")),
+                            "start": float(w.get("start", 0.0)),
+                            "end": float(w.get("end", 0.0)),
+                        }
+                        for w in s["words"]
+                    ]
+                seg_list.append(entry)
+
+        full_text = (result.get("text") or "").strip()
+        if not full_text:
+            full_text = " ".join(full_text_parts).strip()
+
+        processing_time = time.time() - start_time
+        metadata = {
+            "model_size": model_size,
+            "model_repo": repo,
+            "backend": "mlx-whisper",
+            "device": "apple-gpu",
+            "compute_type": compute_type,
+            "vad_filter": False,
+            "vad_filter_note": "vad_filter wird vom MLX-Backend nicht unterstuetzt",
+            "word_timestamps": bool(word_timestamps),
+            "processing_time": round(processing_time, 3),
+            "hostname": socket.gethostname(),
+        }
+        if file_name:
+            metadata["file_name"] = file_name
+        if file_url:
+            metadata["file_url"] = file_url
+
+        return {
+            "success": True,
+            "result": {
+                "text": full_text,
+                "language": result.get("language"),
+                "segments": seg_list,
+                "metadata": metadata,
+            },
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+async def run_async_job_gpu(
+    job_id: str,
+    file_path: str,
+    model_size: str,
+    lang: Optional[str],
+    ts: bool,
+    callback: Optional[str],
+    file_name: Optional[str] = None,
+    file_url: Optional[str] = None,
+    word_timestamps: bool = False,
+):
+    """Async-Runner fuer /v1/asr/gpu (gleiche Job-/Callback-Semantik)."""
+    loop = asyncio.get_running_loop()
+    try:
+        future = executor.submit(
+            transcribe_worker_gpu,
+            file_path,
+            model_size,
+            COMPUTE_TYPE,
+            lang,
+            True,
+            ts,
+            file_name,
+            file_url,
+            word_timestamps,
+        )
+        response = await loop.run_in_executor(None, future.result)
+
+        if response["success"]:
+            save_job_result(job_id, response["result"], "completed")
+            if callback:
+                try:
+                    headers = {}
+                    if CALLBACK_AUTH_SECRET:
+                        headers["Authorization"] = f"Bearer {CALLBACK_AUTH_SECRET}"
+                    async with httpx.AsyncClient() as client:
+                        try:
+                            cb_response = await client.post(
+                                callback,
+                                json={
+                                    "job_id": job_id,
+                                    "status": "completed",
+                                    "result": response["result"],
+                                },
+                                headers=headers,
+                            )
+                            cb_response.raise_for_status()
+                            logger.info(
+                                "GPU callback response status: %s",
+                                cb_response.status_code,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "GPU callback failed for job %s: %s", job_id, e
+                            )
+                except Exception as e:
+                    logger.error("GPU callback logic failed for job %s: %s", job_id, e)
+        else:
+            save_job_result(job_id, {"error": response["error"]}, "failed")
+            if callback:
+                try:
+                    headers = {}
+                    if CALLBACK_AUTH_SECRET:
+                        headers["Authorization"] = f"Bearer {CALLBACK_AUTH_SECRET}"
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            callback,
+                            json={
+                                "job_id": job_id,
+                                "status": "failed",
+                                "error": response["error"],
+                            },
+                            headers=headers,
+                        )
+                except Exception as e:
+                    logger.error("GPU error callback failed for job %s: %s", job_id, e)
+
+    except Exception as e:
+        logger.error("GPU async job wrapper failed for %s: %s", job_id, e)
+        save_job_result(job_id, {"error": str(e)}, "failed")
+        if callback:
+            try:
+                headers = {}
+                if CALLBACK_AUTH_SECRET:
+                    headers["Authorization"] = f"Bearer {CALLBACK_AUTH_SECRET}"
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        callback,
+                        json={"job_id": job_id, "status": "failed", "error": str(e)},
+                        headers=headers,
+                    )
+            except Exception as ex:
+                logger.error("GPU error callback failed for job %s: %s", job_id, ex)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
+@app.post("/v1/asr/gpu")
+async def asr_gpu(
+    file: Optional[UploadFile] = File(None),
+    file_url: Optional[str] = Form(None),
+    language: str = Form(DEFAULT_LANGUAGE),
+    timestamps: bool = Form(True),
+    vad_filter: bool = Form(True),
+    word_timestamps: bool = Form(False),
+    model_size: str = Form(DEFAULT_GPU_MODEL_SIZE),
+    callback_url: Optional[str] = Form(None),
+    force_async: bool = Form(False),
+):
+    logger.info(
+        "GPU ASR request received file=%s file_url=%s model_size=%s word_timestamps=%s",
+        file.filename if file else "None",
+        file_url,
+        model_size,
+        word_timestamps,
+    )
+
+    if not file and not file_url:
+        raise HTTPException(status_code=400, detail="Either 'file' or 'file_url' must be provided.")
+
+    try:
+        resolve_mlx_repo(model_size)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    suffix = ".bin"
+    if file:
+        suffix = os.path.splitext(file.filename or "")[1] or ".bin"
+    elif file_url:
+        from urllib.parse import urlparse
+
+        path = urlparse(file_url).path
+        suffix = os.path.splitext(path)[1] or ".bin"
+
+    temp_fd, temp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(temp_fd)
+
+    lang_val = None if (language or "").lower() == "auto" else language
+
+    try:
+        if file:
+            with open(temp_path, "wb") as tmp:
+                tmp.write(await file.read())
+        else:
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+                try:
+                    check_res = await client.get(
+                        file_url, headers={"Range": "bytes=0-0"}
+                    )
+                    check_res.raise_for_status()
+                except Exception as e:
+                    logger.error("File check failed for %s: %s", file_url, e)
+                    status_code = 400
+                    if hasattr(e, "response") and e.response is not None:
+                        status_code = e.response.status_code
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    raise HTTPException(
+                        status_code=status_code,
+                        detail=f"File check failed at URL: {file_url} (Error: {e})",
+                    )
+
+            job_id = f"{ulid.ULID()}-{socket.gethostname()}"
+            logger.info("GPU: switching to async mode for file_url job %s", job_id)
+            save_job_result(job_id, {}, "processing")
+
+            async def download_and_run():
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True) as client:
+                        async with client.stream("GET", file_url) as response:
+                            if response.status_code != 200:
+                                raise Exception(
+                                    f"Failed to download file from URL: {response.status_code}"
+                                )
+                            with open(temp_path, "wb") as tmp:
+                                async for chunk in response.aiter_bytes():
+                                    tmp.write(chunk)
+
+                    await run_async_job_gpu(
+                        job_id, temp_path, model_size, lang_val, timestamps,
+                        callback_url, None, file_url, word_timestamps,
+                    )
+                except Exception as e:
+                    logger.error("GPU async download/job failed: %s", e)
+                    save_job_result(job_id, {"error": str(e)}, "failed")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+            asyncio.create_task(download_and_run())
+
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "job_id": job_id,
+                    "status_url": f"/v1/asr/status/{job_id}",
+                    "download_url": f"/v1/asr/download/{job_id}",
+                    "message": "File download and processing started in background.",
+                },
+            )
+
+        duration_sec = audio_duration_sec(temp_path) or 0.0
+        logger.info("GPU: audio duration detected: %.2fs", duration_sec)
+
+        if duration_sec > ASYNC_THRESHOLD_SEC or force_async:
+            job_id = f"{ulid.ULID()}-{socket.gethostname()}"
+            logger.info("GPU: switching to async mode for job %s", job_id)
+            save_job_result(job_id, {}, "processing")
+
+            asyncio.create_task(
+                run_async_job_gpu(
+                    job_id, temp_path, model_size, lang_val, timestamps,
+                    callback_url, file.filename if file else None, file_url,
+                    word_timestamps,
+                )
+            )
+
+            response_content = {
+                "job_id": job_id,
+                "status_url": f"/v1/asr/status/{job_id}",
+                "download_url": f"/v1/asr/download/{job_id}",
+                "message": "Job accepted. Processing in background.",
+            }
+            if callback_url:
+                response_content["callback_url"] = callback_url
+
+            return JSONResponse(status_code=202, content=response_content)
+
+        # Sync path
+        loop = asyncio.get_running_loop()
+        future = executor.submit(
+            transcribe_worker_gpu,
+            temp_path,
+            model_size,
+            COMPUTE_TYPE,
+            lang_val,
+            vad_filter,
+            timestamps,
+            file.filename if file else None,
+            file_url,
+            word_timestamps,
+        )
+        response = await loop.run_in_executor(None, future.result)
+
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+        if not response["success"]:
+            raise HTTPException(status_code=500, detail=response["error"])
+
+        result = response["result"]
+        if callback_url:
+            result["callback_url"] = callback_url
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        logger.error("GPU ASR endpoint failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class SegmentOut(BaseModel):
     start: float
     end: float

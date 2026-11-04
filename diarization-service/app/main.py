@@ -78,11 +78,14 @@ def get_job_data(job_id: str) -> Optional[Dict[str, Any]]:
         return json.load(f)
 
 
-async def run_async_job(job_id: str, file_path: str, callback: Optional[str], file_name: Optional[str] = None, file_url: Optional[str] = None):
+async def run_async_job(job_id: str, file_path: str, callback: Optional[str], file_name: Optional[str] = None, file_url: Optional[str] = None, worker=None):
     loop = asyncio.get_running_loop()
+    # Default bleibt der bisherige speaker_check_worker - bestehende Aufrufe
+    # (ohne worker-Argument) sind damit exakt wie bisher verhalten.
+    worker = worker or speaker_check_worker
     try:
         # Offload to separate process; worker will ensure pipeline is loaded
-        future = executor.submit(speaker_check_worker, file_path, file_name, file_url)
+        future = executor.submit(worker, file_path, file_name, file_url)
         response = await loop.run_in_executor(None, future.result)
 
         if response.get("success"):
@@ -452,6 +455,378 @@ async def speaker_check(
         raise
     except Exception as e:
         logger.error("Speaker-check endpoint failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if remove_after:
+            try:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            except Exception:
+                pass
+
+
+# ===========================================================================
+# /v1/diarize - neue Route: liefert die vollstaendige Sprecher-Zeitlinie
+# (Turns mit Start/Ende/Sprecher) statt nur einer True/False-Entscheidung.
+# Der bestehende /v1/speaker-check-Endpunkt bleibt unveraendert.
+# ===========================================================================
+
+
+def _write_wav_16k(samples, sample_rate: int) -> str:
+    """Schreibt Samples als 16 kHz mono WAV (temporaere Datei)."""
+    import numpy as np
+
+    samples = np.asarray(samples, dtype=np.float32)
+    if samples.ndim > 1:
+        samples = samples.mean(axis=1)
+
+    if sample_rate != 16000:
+        try:
+            from math import gcd
+
+            from scipy.signal import resample_poly
+
+            g = gcd(16000, int(sample_rate))
+            samples = resample_poly(samples, 16000 // g, int(sample_rate) // g).astype(
+                np.float32
+            )
+        except Exception:
+            # Fallback: lineare Interpolation (numpy reicht fuer Diarization)
+            duration = samples.shape[0] / float(sample_rate)
+            target_len = int(round(duration * 16000))
+            x_old = np.linspace(0.0, duration, num=samples.shape[0], endpoint=False)
+            x_new = np.linspace(0.0, duration, num=target_len, endpoint=False)
+            samples = np.interp(x_new, x_old, samples).astype(np.float32)
+
+    import soundfile as sf
+
+    fd, out_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    sf.write(out_path, samples, 16000)
+    return out_path
+
+
+def load_audio_16k_mono(input_path: str) -> str:
+    """Dekodiert Audio nach 16 kHz mono WAV - ohne ffmpeg-Zwang lokal.
+
+    Versucht der Reihe nach:
+      1. soundfile (wav, flac, ogg, mp3 - via libsndfile, ueberall vorhanden)
+      2. PyAV      (m4a, aac, webm, ... - gebueschelte ffmpeg-Libs; lokal durch
+                    faster-whisper als Abhaengigkeit vorhanden)
+      3. pydub     (benoetigt system-weites ffmpeg - im Docker-Image vorhanden)
+    """
+    limit_frames = (
+        int(MAX_ANALYZE_SEC * 16000)
+        if MAX_ANALYZE_SEC and MAX_ANALYZE_SEC > 0
+        else None
+    )
+
+    # 1) soundfile
+    try:
+        import soundfile as sf
+
+        info = sf.info(input_path)
+        frames = info.frames if limit_frames is None else min(info.frames, limit_frames)
+        samples, sample_rate = sf.read(
+            input_path, frames=frames, dtype="float32", always_2d=True
+        )
+        return _write_wav_16k(samples, sample_rate)
+    except Exception as e:
+        logger.info("soundfile decode failed (%s), trying PyAV...", e)
+
+    # 2) PyAV
+    try:
+        import av
+        import numpy as np
+
+        with av.open(input_path) as container:
+            stream = next((s for s in container.streams.audio if s.type == "audio"), None)
+            if stream is None:
+                raise ValueError("No audio stream found")
+            resampler = av.AudioResampler(format="fltp", layout="mono", rate=16000)
+            chunks = []
+            total = 0
+            for frame in container.decode(stream):
+                for out_frame in resampler.resample(frame):
+                    arr = out_frame.to_ndarray().astype(np.float32).reshape(-1)
+                    chunks.append(arr)
+                    total += arr.shape[0]
+                    if limit_frames is not None and total >= limit_frames:
+                        break
+                if limit_frames is not None and total >= limit_frames:
+                    break
+            for out_frame in resampler.resample(None):
+                if limit_frames is None or total < limit_frames:
+                    arr = out_frame.to_ndarray().astype(np.float32).reshape(-1)
+                    chunks.append(arr)
+                    total += arr.shape[0]
+        samples = np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float32)
+        if limit_frames is not None:
+            samples = samples[:limit_frames]
+        return _write_wav_16k(samples, 16000)
+    except Exception as e:
+        logger.info("PyAV decode failed (%s), trying pydub...", e)
+
+    # 3) pydub (ffmpeg)
+    audio = AudioSegment.from_file(input_path)
+    if limit_frames:
+        audio = audio[: int(MAX_ANALYZE_SEC * 1000)]
+    audio = audio.set_channels(1).set_frame_rate(16000)
+    fd, out_path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    audio.export(out_path, format="wav")
+    return out_path
+
+
+def diarize_worker(
+    file_path: str,
+    file_name: Optional[str] = None,
+    file_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Liefert die vollstaendige Sprecher-Zeitlinie (Turns) einer Audiodatei."""
+    start = time.time()
+    wav_path = None
+
+    try:
+        if _PIPELINE is None:
+            load_pipeline()
+
+        if _PIPELINE is None:
+            raise RuntimeError(_PIPELINE_ERROR or "Pipeline not loaded.")
+
+        wav_path = load_audio_16k_mono(file_path)
+
+        annotation = _PIPELINE(wav_path)
+
+        turns = []
+        speaker_durations: Dict[str, float] = {}
+        total_speech = 0.0
+
+        for segment, _, label in annotation.itertracks(yield_label=True):
+            seg_start = float(segment.start)
+            seg_end = float(segment.end)
+            turns.append(
+                {"start": round(seg_start, 3), "end": round(seg_end, 3), "speaker": label}
+            )
+            dur = max(0.0, seg_end - seg_start)
+            speaker_durations[label] = speaker_durations.get(label, 0.0) + dur
+            total_speech += dur
+
+        # Gleiche Qualifizierungs-Schwellen wie /v1/speaker-check
+        qualifying = []
+        for spk, dur in speaker_durations.items():
+            share = (dur / total_speech) if total_speech > 0 else 0.0
+            if dur >= MIN_SPEAKER_SEC or share >= MIN_SPEAKER_SHARE:
+                qualifying.append(spk)
+
+        number_speakers = len(qualifying)
+        multi_speaker = number_speakers >= 2
+
+        processing_time = time.time() - start
+
+        metadata = {
+            "diarization_model": DIARIZATION_MODEL,
+            "snapshot_dir": _PIPELINE_LOCAL_DIR,
+            "min_speaker_sec": MIN_SPEAKER_SEC,
+            "min_speaker_share": MIN_SPEAKER_SHARE,
+            "max_analyze_sec": MAX_ANALYZE_SEC,
+            "processing_time": round(processing_time, 3),
+            "hostname": socket.gethostname(),
+            "datetime": datetime.utcnow().isoformat(),
+            "turns": len(turns),
+        }
+        if file_name:
+            metadata["file_name"] = file_name
+        if file_url:
+            metadata["file_url"] = file_url
+
+        return {
+            "success": True,
+            "result": {
+                "speakers": turns,
+                "speaker_durations": {
+                    k: round(v, 3) for k, v in speaker_durations.items()
+                },
+                "number_speakers": number_speakers,
+                "multi_speaker": multi_speaker,
+                "metadata": metadata,
+            },
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+    finally:
+        try:
+            if wav_path and os.path.exists(wav_path):
+                os.remove(wav_path)
+        except Exception:
+            pass
+
+
+@app.get("/v1/diarize/status/{job_id}")
+async def get_diarize_status(job_id: str):
+    data = get_job_data(job_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "job_id": data["job_id"],
+        "status": data["status"],
+        "updated_at": data["updated_at"],
+    }
+
+
+@app.get("/v1/diarize/download/{job_id}")
+async def download_diarize_result(job_id: str):
+    data = get_job_data(job_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if data["status"] != "completed":
+        raise HTTPException(status_code=400, detail=f"Job status is {data['status']}")
+    return data["result"]
+
+
+@app.post("/v1/diarize")
+async def diarize(
+    file: Optional[UploadFile] = File(None),
+    file_url: Optional[str] = Form(None),
+    callback_url: Optional[str] = Form(None),
+    force_async: bool = Form(False),
+):
+    logger.info(
+        "Diarize request received file=%s file_url=%s callback_url=%s force_async=%s",
+        file.filename if file else "None",
+        file_url,
+        callback_url,
+        force_async,
+    )
+
+    if not file and not file_url:
+        raise HTTPException(
+            status_code=400, detail="Either 'file' or 'file_url' must be provided."
+        )
+
+    suffix = ".bin"
+    if file and file.filename:
+        _, ext = os.path.splitext(file.filename)
+        suffix = ext or ".bin"
+    elif file_url:
+        from urllib.parse import urlparse
+
+        ext = os.path.splitext(urlparse(file_url).path)[1]
+        suffix = ext or ".bin"
+
+    fd, temp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    remove_after = True
+
+    try:
+        if file:
+            with open(temp_path, "wb") as tmp:
+                tmp.write(await file.read())
+        else:
+            # Download from URL (gleiche Handhabung wie /v1/speaker-check)
+            logger.info("Checking if file exists at %s", file_url)
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+                try:
+                    check_res = await client.get(
+                        file_url, headers={"Range": "bytes=0-0"}
+                    )
+                    check_res.raise_for_status()
+                except Exception as e:
+                    logger.error("File check failed for %s: %s", file_url, e)
+                    status_code = 400
+                    if hasattr(e, "response") and e.response is not None:
+                        status_code = e.response.status_code
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+                    raise HTTPException(
+                        status_code=status_code,
+                        detail=f"File check failed at URL: {file_url} (Error: {e})",
+                    )
+
+            job_id = f"{uuid.uuid4()}-{socket.gethostname()}"
+            logger.info("Switching to async mode for file_url job %s", job_id)
+            save_job_result(job_id, {}, "processing")
+
+            async def download_and_run():
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True) as client:
+                        async with client.stream("GET", file_url) as resp:
+                            if resp.status_code != 200:
+                                raise Exception(
+                                    f"Failed to download file: {resp.status_code}"
+                                )
+                            with open(temp_path, "wb") as tmp:
+                                async for chunk in resp.aiter_bytes():
+                                    tmp.write(chunk)
+
+                    await run_async_job(
+                        job_id, temp_path, callback_url, None, file_url,
+                        worker=diarize_worker,
+                    )
+                except Exception as e:
+                    logger.error("Async download/job failed: %s", e)
+                    save_job_result(job_id, {"error": str(e)}, "failed")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+            asyncio.create_task(download_and_run())
+
+            return JSONResponse(
+                status_code=202,
+                content={
+                    "job_id": job_id,
+                    "status_url": f"/v1/diarize/status/{job_id}",
+                    "download_url": f"/v1/diarize/download/{job_id}",
+                    "message": "File download and processing started in background.",
+                },
+            )
+
+        # Decide path: async if forced or callback given
+        if force_async or callback_url:
+            job_id = f"{uuid.uuid4()}-{socket.gethostname()}"
+            logger.info("Switching to async mode for job %s", job_id)
+            save_job_result(job_id, {}, "processing")
+
+            asyncio.create_task(
+                run_async_job(
+                    job_id, temp_path, callback_url,
+                    file.filename if file else None, file_url,
+                    worker=diarize_worker,
+                )
+            )
+            remove_after = False  # async runner will remove
+
+            content = {
+                "job_id": job_id,
+                "status_url": f"/v1/diarize/status/{job_id}",
+                "download_url": f"/v1/diarize/download/{job_id}",
+                "message": "Job accepted. Processing in background.",
+            }
+            if callback_url:
+                content["callback_url"] = callback_url
+            return JSONResponse(status_code=202, content=content)
+
+        # Sync path
+        loop = asyncio.get_running_loop()
+        future = executor.submit(
+            diarize_worker, temp_path, file.filename if file else None, file_url
+        )
+        response = await loop.run_in_executor(None, future.result)
+
+        if not response.get("success"):
+            raise HTTPException(status_code=500, detail=response.get("error"))
+
+        result = response["result"]
+        if callback_url:
+            result["callback_url"] = callback_url
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Diarize endpoint failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if remove_after:

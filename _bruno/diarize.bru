@@ -1,0 +1,25 @@
+meta {
+  name: diarize
+  type: http
+  seq: 50
+}
+
+post {
+  url: {{baseUrl}}/diarization/v1/diarize
+  body: multipartForm
+  auth: inherit
+}
+
+headers {
+  Content-Type: multipart/form-data
+}
+
+body:multipart-form {
+  ~file: @file(/Users/christianbister/Downloads/sample.wav)
+  ~file_url: https://example.com/audio.wav
+}
+
+settings {
+  encodeUrl: false
+  timeout: 0
+}
