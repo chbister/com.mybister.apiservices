@@ -1,6 +1,6 @@
 # API Services Project
 
-This project provides a robust, containerized suite of AI microservices for Speech-to-Text (ASR), Sentiment Analysis, Emotion Detection, Barcode Recognition, and Result Aggregation.
+This project provides a robust, containerized suite of AI microservices covering **Speech-to-Text (ASR), Speaker Diarization, Text-to-Speech, Sentiment & Emotion Analysis, OCR, Document Extraction, NER, Resume Parsing, QR/Barcode Recognition, Audio Conversion, and Result Aggregation** – all routed via Traefik and orchestrated with Docker Compose.
 
 ## 🚀 Architecture Overview
 
@@ -8,10 +8,13 @@ The system is designed with a **Traefik-based routing** pattern. All external tr
 
 ### Key Components:
 1.  **Traefik**: Central entry point and reverse proxy. Handles routing and middlewares like `StripPrefix` and `ForwardAuth`.
-2.  **ASR Services**: Multiple instances of Faster-Whisper (Tiny to Large-v3) supporting both synchronous and asynchronous (Pull/Push) processing.
-3.  **Analysis Services**: Multilingual Sentiment and Emotion detection (Nuance, Vibe, and State variants).
-4.  **Processor Service**: An aggregator that orchestrates calls between ASR and Analysis services to produce enriched results.
-5.  **Barcode Service**: High-contrast recognition of QR and barcodes from images or URLs.
+2.  **ASR Services**: Multiple instances of Faster-Whisper (Tiny to Large-v3) supporting both synchronous and asynchronous (Pull/Push) processing, plus a local Apple-GPU endpoint (`/v1/asr/gpu`, mlx-whisper).
+3.  **Diarization Service**: Speaker detection (`speaker-check`) and full speaker timelines (`diarize`) via pyannote.
+4.  **Analysis Services**: Multilingual Sentiment and Emotion detection (base, Nuance, Vibe, State, and Hate variants).
+5.  **Processor Service**: An aggregator that orchestrates calls between ASR and Analysis services (`/v1/process`) and merges ASR + diarization into speaker protocols (`/v1/transcript`).
+6.  **Speech Services**: Text-to-Speech (XTTS v2 with voice cloning) and audio conversion (`convert`, ffmpeg in-container).
+7.  **Document Services** (CareerGraph profile): OCR (async, with dedicated worker), Resume parsing, Text/URL extraction, NER.
+8.  **Recognition Services**: Barcode/QR detection from images, QR code generation, food recognition (zero-shot).
 
 ---
 
@@ -54,10 +57,13 @@ Supports `tiny`, `small`, `medium`, and `large-v3` models.
 - ffmpeg lives only inside this container – the host never needs it.
 
 ### 3. Analysis Services (Multilingual)
-- **Sentiment**: `POST /sentiment/v1/sentiment`
-- **Emotion (Nuance)**: `POST /emotion-nuance/v1/emotion` (28 fine-grained emotions).
-- **Emotion (State)**: `POST /emotion-state/v1/emotion` (7 core psychological states).
-- **Emotion (Vibe)**: `POST /emotion-vibe/v1/emotion` (1-5 star rating).
+All emotion services share the same code base; the model is selected via `EMOTION_MODEL_ID`.
+- **Sentiment**: `POST /sentiment/v1/sentiment` – multilingual sentiment scoring.
+- **Emotion (base)**: `POST /emotion/v1/emotion` – 6 basic emotions (DistilBERT default).
+- **Emotion (Nuance)**: `POST /emotion-nuance/v1/emotion` – 28 fine-grained emotions.
+- **Emotion (State)**: `POST /emotion-state/v1/emotion` – 7 core psychological states.
+- **Emotion (Vibe)**: `POST /emotion-vibe/v1/emotion` – 1-5 star rating.
+- **Emotion (Hate)**: `POST /emotion-hate/v1/emotion` – hate-speech classifier (`cardiffnlp/twitter-roberta-base-hate`).
 
 ### 4. Processor (The Aggregator)
 Combines ASR results with all analysis services.
@@ -74,12 +80,47 @@ Combines ASR results with all analysis services.
     [00:01:12] Anna: Wann hat das Gespräch begonnen?
     [00:01:16] Sprecher 2: Kurz nach neun.
     ```
+  - Step-by-step guide (German): [docs/transkription-anleitung.md](docs/transkription-anleitung.md).
 
-### 5. Barcode Service
-- **Endpoint**: `POST /barcode/v1/barcode`
-- **Highlight**: `POST /barcode/v1/barcode/highlight` (Returns image with high-contrast borders).
+### 5. TTS (Text-to-Speech)
+- **Endpoint**: `POST /tts/v1/tts`
+- **Models**: Coqui **XTTS v2** (multilingual, voice cloning) with GPU detection;
+  automatic CPU fallback to German Tacotron2 (`tts_models/de/thorsten/tacotron2-DDS_German`).
+- Configurable voices via `TTS_DEFAULT_VOICE` / `TTS_DEFAULT_MALE_VOICE`, model root via `TTS_MODEL_ROOT`.
 
-### 6. Callback Tester
+### 6. OCR (CareerGraph profile)
+Async document OCR with a dedicated worker container (`ocr-worker`).
+- **Endpoint**: `POST /ocr/v1/ocr` (UploadFile or `file_url`) – returns a job immediately for larger documents.
+- **Status/Download**: `GET /ocr/v1/ocr/status/{job_id}` and `GET /ocr/v1/ocr/download/{job_id}`.
+- Deployed in the `careergraph` profile (`make up-careergraph-prod|dev`), production host `ask.vereinstalk.de`.
+
+### 7. Extraction & NER
+- **Extraction**: `POST /extraction/v1/extract` – extracts structured data (names, phone numbers, …) from text/lines via pluggable extractor strategies (`mode`). Production host `ask.vereinstalk.de`.
+- **NER**: `POST /ner/v1/ner` – named entity recognition, async with
+  `GET /ner/v1/ner/status/{job_id}` and `.../download/{job_id}`.
+
+### 8. Resume Parsing (CareerGraph profile)
+- **Endpoint**: `POST /resume/v1/resume/extract` – parses CVs (stations, dates, contact data) with an optional NER model (`NER_ENABLED`/`NER_MODEL_ID`).
+- Part of the `careergraph` profile alongside `ocr`/`ocr-worker`.
+
+### 9. Metadata
+- **Endpoint**: `POST /metadata/metadata` (Traefik strips the `/metadata` prefix, the app route itself is `/metadata`, hence the doubled path) – generates/returns metadata for media files, async with `GET /metadata/metadata/status/{job_id}` and `GET /metadata/metadata/download/{job_id}`.
+- Config: `MAX_DOWNLOAD_BYTES`, `DOWNLOAD_TIMEOUT_S`.
+
+### 10. Barcode & QR
+- **Barcode detection**: `POST /barcode/v1/barcode` (image upload or URL).
+- **Highlight**: `POST /barcode/v1/barcode/highlight` (returns image with high-contrast borders).
+- **QR generation**: `GET /qrcode/v1/qrcode?data=...` – renders a QR code as image stream (generation, not detection).
+
+### 11. Food Recognition *(code ready, not yet in compose)*
+- **Endpoint**: `POST /food-recognition/v1/detect` – zero-shot food item detection (GoutWatcher component list).
+- The service code exists (`food-recognition-service/`), but its compose entries are currently commented out.
+
+### 12. Statusbar *(code ready, not yet in compose)*
+- **Endpoint**: `POST /statusbar/v1/statusbar/edit` – server-side status bar image editing (PIL).
+- Not wired into `docker-compose.yml` yet (commented out).
+
+### 13. Callback Tester
 Simulates a webhook receiver for testing asynchronous ASR callbacks.
 - **Endpoint**: `POST /callback-tester/listen`
 - **Features**: 
@@ -106,6 +147,13 @@ Simulates a webhook receiver for testing asynchronous ASR callbacks.
 - **OrbStack** (recommended for macOS) or **Docker Desktop**.
 - If using OrbStack, ensure the Docker command is available in your shell.
 
+### Profiles
+| Profile | Services |
+|---|---|
+| `prod` / `dev` | Main suite (ASR, diarization, analysis, processor, TTS, OCR, conversion, …) |
+| `careergraph-prod` / `careergraph-dev` | CareerGraph subset: `ocr`, `ocr-worker`, `resume` |
+| `kickfriends-prod` / `kickfriends-dev` | Kickfriends subset |
+
 ### Development Mode
 ```bash
 make up-dev
@@ -114,6 +162,11 @@ make up-dev
 ### Production Mode
 ```bash
 make up-prod
+```
+
+### CareerGraph / Kickfriends
+```bash
+make up-careergraph-prod   # or up-careergraph-dev, up-kickfriends-prod, ...
 ```
 
 ### Checking Status
