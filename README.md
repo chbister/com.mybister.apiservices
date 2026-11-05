@@ -174,6 +174,30 @@ Each service has a `/health` endpoint that returns the **hostname/container ID**
 
 ---
 
+## 🔗 DNS Management (Hetzner CNAMEs)
+
+Every independently deployable service gets a CNAME
+`<service-id>.api.mybister.com → <host>.mybister.com` in the Hetzner Cloud
+DNS zone `mybister.com`. The repo ships a small CLI/library for that:
+
+```bash
+export HETZNER_API_TOKEN="..."            # Hetzner Cloud API token (Read & Write)
+
+python -m tools.hetzner_dns list                    # show current CNAMEs
+python -m tools.hetzner_dns bulk --host b03         # dry-run: plan all services
+python -m tools.hetzner_dns bulk --host b03 --apply # create missing CNAMEs
+python -m tools.hetzner_dns set asr-small b02 --apply
+python -m tools.hetzner_dns get asr-small
+```
+
+`set` and `bulk` are dry-runs by default; diverging CNAMEs are only
+overwritten in bulk with an explicit `--force`. The central service list
+lives in `tools/service_registry.json` and is reused by the tool.
+Full documentation (config, exit codes, JSON output, Python API,
+GitHub Actions): **[docs/hetzner-dns.md](docs/hetzner-dns.md)**.
+
+---
+
 ## 🍎 Local GPU Runs (no Docker)
 
 > **Step-by-step guide (German):** [docs/transkription-anleitung.md](docs/transkription-anleitung.md)
