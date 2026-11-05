@@ -23,6 +23,15 @@ Beispiel: `asr-small.api.mybister.com → b03.mybister.com.`
 > „identisch" übersprungen: `list`/`get` zeigen den Rohwert mit Status
 > `DIFFERS`, `bulk` meldet dafür Konflikt und schreibt erst mit
 > `--force` (bzw. `set ... --apply`) auf `b03.mybister.com.` um.
+>
+> **Zonenrelative RRset-Namen:** Die Hetzner-API hängt den Zonennamen an
+> **jeden** RRset-Namen an, den sie empfängt. Das Tool sendet deshalb
+> immer die zonenrelative Form (`asr-small.api` für
+> `asr-small.api.mybister.com` in der Zone `mybister.com`, `@` = Apex) –
+> ein FQDN auf dem Wire würde den verdoppelten Record
+> `asr-small.api.mybister.com.mybister.com` erzeugen. Angezeigt werden
+> wie gewohnt die vollständigen Namen; beim Lesen toleriert das Tool
+> beide Namensformen.
 
 Das Tool dient jetzt der initialen Bulk-Anlage und später dem automatischen
 Abgleich durch den ressourcenbasierten Multi-Host-Deployment-Scheduler.

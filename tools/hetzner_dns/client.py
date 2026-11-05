@@ -16,6 +16,14 @@ Endpoint                                       Purpose
 ``GET  /actions/{id}``                         poll async actions
 =============================================  =================================
 
+RR set **names are zone-relative**: the API appends the zone name to every
+name it receives, so ``asr-small.api`` in the zone ``mybister.com`` becomes
+``asr-small.api.mybister.com`` (``@`` is the zone apex). Passing a full
+FQDN creates a doubled record (``asr-small.api.mybister.com.mybister.com``)
+- callers must convert FQDNs with
+:func:`tools.hetzner_dns.validators.to_relative` before calling this
+client. CNAME record values are the opposite: absolute (trailing dot).
+
 Authentication: ``Authorization: Bearer <token>``. The token is only ever
 held in memory, is excluded from ``repr``/logs and is never written to disk.
 
