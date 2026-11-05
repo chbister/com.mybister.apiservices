@@ -8,7 +8,10 @@ against the Hetzner Cloud API (``https://api.hetzner.cloud/v1``).
 
 CNAME values are always written absolute (trailing dot,
 ``b03.mybister.com.``); inputs (env vars, ``host`` arguments) are given
-without a dot and are normalized by the tool.
+without a dot and are normalized by the tool. Stored values are reported
+verbatim, so a record missing its trailing dot shows up as a divergence
+(``status="differs"`` / bulk conflict) and is rewritten only with an
+explicit ``--apply``/``--force``.
 
 Library usage (no CLI/subprocess needed)::
 

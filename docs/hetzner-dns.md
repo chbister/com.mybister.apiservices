@@ -11,14 +11,18 @@ Jeder eigenständig deploybare Service erhält einen CNAME der Form:
 
 Beispiel: `asr-small.api.mybister.com → b03.mybister.com.`
 
-> **Absolute CNAME-Werte:** Der CNAME-Wert wird zwingend mit
-> abschließendem Punkt geschrieben (DNS-Wire-Format), also
-> `b03.mybister.com.` – das gilt für Writes, Dry-Run-Ausgaben und
-> JSON-Felder (`target`, `current_target`, `expected_host`).
+> **Absolute CNAME-Werte:** Geschrieben wird der CNAME-Wert zwingend mit
+> abschließendem Punkt (DNS-Wire-Format), also `b03.mybister.com.` – bei
+> `CREATE`/`UPDATE` und in den Plan-Ausgaben (`target` in `set`/`bulk`).
 > Eingaben (Umgebungsvariablen wie `DEFAULT_DOCKER_HOST`, `--host`,
 > Service-Argumente) werden **ohne** Punkt angegeben; ein mitgeliebter
-> Punkt wird akzeptiert und beim Einlesen entfernt. Bestehende Records
-> ohne Punkt werden beim Abgleich als identisch erkannt.
+> Punkt wird akzeptiert und beim Einlesen entfernt.
+>
+> **Fehlender Punkt = Abweichung:** Ein gespeicherter Wert **ohne**
+> Punkt (`b03.mybister.com`) gilt als abweichend und wird nicht als
+> „identisch" übersprungen: `list`/`get` zeigen den Rohwert mit Status
+> `DIFFERS`, `bulk` meldet dafür Konflikt und schreibt erst mit
+> `--force` (bzw. `set ... --apply`) auf `b03.mybister.com.` um.
 
 Das Tool dient jetzt der initialen Bulk-Anlage und später dem automatischen
 Abgleich durch den ressourcenbasierten Multi-Host-Deployment-Scheduler.
@@ -77,6 +81,8 @@ DEFAULT_DOCKER_HOST=b03.mybister.com  # Erwarteter Ziel-Host für die Anzeige (D
 > Alle Ziel-Angaben (Config und CLI-Eingaben) werden **ohne**
 > abschließenden Punkt geschrieben (`b03.mybister.com`); das Tool ergänzt
 > den Punkt beim Schreiben des CNAME-Wertes selbst (`b03.mybister.com.`).
+> Bereits gespeicherte Werte ohne Punkt werden als Abweichung erkannt
+> und nur nach explizitem `--apply` (bzw. `bulk --force`) umgeschrieben.
 
 Optionale Variablen:
 
@@ -146,18 +152,23 @@ SERVICE       DNS NAME                         TARGET             TTL  EXPECTED 
 asr-tiny      asr-tiny.api.mybister.com        b03.mybister.com.  60   b03.mybister.com. PRESENT
 asr-small     asr-small.api.mybister.com       -                  -    b03.mybister.com. MISSING
 sentiment     sentiment.api.mybister.com       b01.mybister.com.  60   b03.mybister.com. DIFFERS
-ocr           ocr.api.mybister.com             b03.mybister.com.  60   b03.mybister.com. PRESENT
+ocr           ocr.api.mybister.com             b03.mybister.com   60   b03.mybister.com. DIFFERS
 ```
 
 - `PRESENT` = CNAME existiert und zeigt auf den erwarteten Host (`DEFAULT_DOCKER_HOST`)
 - `DIFFERS` = CNAME existiert, zeigt aber woanders hin (nur Information –
-  keine automatische Änderung)
+  keine automatische Änderung). Auch ein Wert, dem nur der
+  abschließende Punkt fehlt (`ocr` im Beispiel), liefert `DIFFERS` –
+  angezeigt wird immer der **gespeicherte Rohwert**, damit die
+  Abweichung sichtbar bleibt
 - `MISSING` = kein CNAME angelegt
 - `CONFLICT` = am selben Namen existiert ein Record anderen Typs (A/AAAA/…)
 
 Mit `--json` liefert das Kommando ein JSON-Array der Struktur
 `{service_id, fqdn, type, target, ttl, exists, conflict_types,
-conflict_targets, expected_host, status}`.
+conflict_targets, expected_host, status}`. `target` ist der
+**gespeicherte Rohwert** (ohne automatische Punkt-Ergänzung),
+`expected_host` der erwartete absolute Wert.
 
 ### 5.2 `get` – einzelnen Service abfragen
 
@@ -212,6 +223,8 @@ Verhalten:
 
 - fehlenden CNAME **anlegen**
 - vorhandenen CNAME mit abweichendem Ziel **aktualisieren**
+- vorhandenen CNAME, dem nur der abschließende Punkt fehlt
+  (`b03.mybister.com` → `b03.mybister.com.`), **normalisieren**
 - unveränderten CNAME **überspringen** (`SKIP`, kein Write)
 - fremde Record-Typen (A/AAAA/TXT/…) am selben Namen als **Konflikt**
   behandeln und **nie** verändern/löschen
@@ -254,7 +267,8 @@ Sicherheitsregeln des Bulk-Vorgangs:
 | Fall | Verhalten |
 |---|---|
 | CNAME fehlt | wird mit `--apply` erstellt (`CREATE`) |
-| CNAME identisch | wird übersprungen (`SKIP`) |
+| CNAME identisch (inkl. Punkt) | wird übersprungen (`SKIP`) |
+| CNAME nur ohne abschließenden Punkt (`…com` statt `…com.`) | **Konflikt** (`CONFLICT`), mit `--force` Normalisierung auf `…com.` (`UPDATE`) |
 | CNAME zeigt auf anderen Host | **Konflikt** (`CONFLICT`), nicht überschrieben |
 | … mit `--force` | wird umgestellt (`UPDATE`) |
 | fremder Record-Typ vorhanden | **Konflikt**, auch `--force` greift hier nicht |
@@ -262,8 +276,24 @@ Sicherheitsregeln des Bulk-Vorgangs:
 
 > **`--force` überschreibt absichtlich vorhandene, abweichende
 > Service-CNAMEs** (z. B. um einen versehentlich verteilten Stand wieder auf
-> einen Host zurückzusetzen). Immer erst den Dry-Run prüfen. Ohne `--force`
-> meldet `bulk` solche Fälle als Konflikt und ändert nichts daran.
+> einen Host zurückzusetzen oder fehlende Punkte zu normalisieren). Immer
+> erst den Dry-Run prüfen. Ohne `--force` meldet `bulk` solche Fälle als
+> Konflikt und ändert nichts daran.
+
+**Normalisierung nachvollziehen (Idempotenz prüfen):**
+
+```bash
+# 1) Dry-Run: dotlose/abweichende Werte erscheinen als CONFLICT
+python -m tools.hetzner_dns bulk --host b03
+
+# 2) Schreiben (nur die Abweichungen)
+python -m tools.hetzner_dns bulk --host b03 --force --apply
+
+# 3) Erneuter Dry-Run: jetzt müssen alle 21 Zeilen SKIP (Unchanged: 21)
+#    erscheinen – andernfalls speichert Hetzner den Wert ohne Punkt,
+#    bitte melden (dann bräuchte es eine andere Prüfstrategie).
+python -m tools.hetzner_dns bulk --host b03
+```
 
 ### 5.5 `services` – Service-Registry
 

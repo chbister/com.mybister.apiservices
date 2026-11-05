@@ -179,7 +179,8 @@ Each service has a `/health` endpoint that returns the **hostname/container ID**
 Every independently deployable service gets a CNAME
 `<service-id>.api.mybister.com → <host>.mybister.com.` in the Hetzner Cloud
 DNS zone `mybister.com` (CNAME values are written absolute, i.e. with a
-trailing dot). The repo ships a small CLI/library for that:
+trailing dot; existing records missing that dot are reported as diverging
+and normalized with `--force`). The repo ships a small CLI/library for that:
 
 ```bash
 export HETZNER_API_TOKEN="..."            # Hetzner Cloud API token (Read & Write)

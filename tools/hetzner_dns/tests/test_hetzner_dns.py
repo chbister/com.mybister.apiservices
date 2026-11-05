@@ -399,7 +399,7 @@ def test_missing_cname_is_created_with_apply():
 # --------------------------------------------------------------------------- #
 def test_identical_cname_is_unchanged_and_not_written():
     fake = FakeHetznerAPI(
-        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com"}], "ttl": 60}]
+        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com."}], "ttl": 60}]
     )
     manager = make_manager(fake)
     change = manager.ensure_service_record("asr-small", "b03", apply=True)
@@ -408,19 +408,40 @@ def test_identical_cname_is_unchanged_and_not_written():
     assert write_requests(fake) == []
 
 
-def test_api_value_with_trailing_dot_is_recognized_as_unchanged():
-    """The API returns absolute CNAME values; they must compare as equal."""
+def test_record_without_trailing_dot_is_updated_by_set():
+    """A stored value missing the dot is a real difference and gets fixed."""
     fake = FakeHetznerAPI(
-        rrsets=[
-            {"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com."}], "ttl": 60}
-        ]
+        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com"}], "ttl": 60}]
     )
     manager = make_manager(fake)
+    record = manager.get_service_record("asr-small")
+    assert record.target == "b03.mybister.com"  # raw stored value stays visible
+    assert record.status == "differs"
+
     change = manager.ensure_service_record("asr-small", "b03", apply=True)
-    assert change.status == STATUS_UNCHANGED
+    assert change.status == STATUS_UPDATED
+    assert change.applied is True
+    assert change.current_target == "b03.mybister.com"
     assert change.target == "b03.mybister.com."
-    assert change.current_target == "b03.mybister.com."
-    assert write_requests(fake) == []
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
+    assert write_requests(fake), "dotless value must be rewritten"
+
+
+def test_record_without_trailing_dot_is_conflict_in_bulk_without_force():
+    fake = FakeHetznerAPI(
+        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com"}], "ttl": 60}]
+    )
+    manager = make_manager(fake)
+    plan = manager.plan_bulk("b03")
+    by_id = {c.service_id: c for c in plan}
+    assert by_id["asr-small"].status == STATUS_CONFLICT  # needs --force to normalize
+    results = manager.apply_bulk(plan)
+    assert {r.service_id: r for r in results}["asr-small"].status == STATUS_CONFLICT
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com"  # untouched
+
+    forced = manager.apply_bulk(manager.plan_bulk("b03", force=True))
+    assert {r.service_id: r for r in forced}["asr-small"].status == STATUS_UPDATED
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
 
 
 # --------------------------------------------------------------------------- #
@@ -463,7 +484,7 @@ def test_bulk_dry_run_changes_nothing():
 def test_bulk_apply_creates_missing_cnames():
     fake = FakeHetznerAPI(
         rrsets=[
-            {"name": "sentiment.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com"}], "ttl": 60}
+            {"name": "sentiment.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com."}], "ttl": 60}
         ]
     )
     manager = make_manager(fake)
@@ -473,8 +494,8 @@ def test_bulk_apply_creates_missing_cnames():
     assert by_id["asr-small"].status == STATUS_CREATED
     assert by_id["sentiment"].status == STATUS_UNCHANGED
     assert fake.cname_target("asr-tiny.api.mybister.com") == "b03.mybister.com."
-    # seeded without a dot and never written -> stored value stays as-is
-    assert fake.cname_target("sentiment.api.mybister.com") == "b03.mybister.com"
+    # already correct and never written -> stored value stays as-is
+    assert fake.cname_target("sentiment.api.mybister.com") == "b03.mybister.com."
     assert len([r for r in fake.write_requests if r["path"].endswith("/rrsets")]) == 2
 
 
@@ -492,7 +513,7 @@ def test_bulk_without_force_reports_conflict_and_does_not_write():
     results = manager.apply_bulk(plan)
     by_id = {r.service_id: r for r in results}
     assert by_id["asr-small"].status == STATUS_CONFLICT
-    assert by_id["asr-small"].current_target == "b01.mybister.com."  # reported absolute
+    assert by_id["asr-small"].current_target == "b01.mybister.com"  # raw stored value
     assert by_id["asr-tiny"].status == STATUS_CREATED
     # the diverging record stays untouched, only missing ones are created
     assert fake.cname_target("asr-small.api.mybister.com") == "b01.mybister.com"
@@ -745,7 +766,7 @@ def test_action_failure_raises_structured_error():
 # --------------------------------------------------------------------------- #
 def test_json_output_is_valid(monkeypatch, capsys):
     fake = FakeHetznerAPI(
-        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com"}], "ttl": 60}]
+        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com."}], "ttl": 60}]
     )
     code, out, _err = run_cli(["list", "--json"], fake, monkeypatch, capsys)
     assert code == cli.EXIT_OK
@@ -761,7 +782,7 @@ def test_json_output_is_valid(monkeypatch, capsys):
         "service_id": "asr-small",
         "fqdn": "asr-small.api.mybister.com",
         "type": "CNAME",
-        "target": "b03.mybister.com.",  # absolute, even though seeded without dot
+        "target": "b03.mybister.com.",
         "ttl": 60,
         "exists": True,
         "conflict_types": [],
@@ -784,7 +805,20 @@ def test_json_output_is_valid(monkeypatch, capsys):
     assert payload["status"] == STATUS_CREATED
     assert payload["applied"] is True
     assert payload["dry_run"] is False
-    assert payload["target"] == "b02.mybister.com."  # absolute value in JSON too
+    assert payload["target"] == "b02.mybister.com."  # plan target is absolute
+
+
+def test_get_json_shows_raw_value_of_dotless_record(monkeypatch, capsys):
+    """The stored value is shown verbatim so a missing dot stays visible."""
+    fake = FakeHetznerAPI(
+        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com"}], "ttl": 60}]
+    )
+    code, out, _err = run_cli(["get", "asr-small", "--json"], fake, monkeypatch, capsys)
+    assert code == cli.EXIT_OK
+    payload = json.loads(out)
+    assert payload["target"] == "b03.mybister.com"       # raw stored value (no dot)
+    assert payload["expected_host"] == "b03.mybister.com."
+    assert payload["status"] == "differs"                # -> bulk: conflict, needs --force
 
 
 def test_get_json_for_missing_record(monkeypatch, capsys):

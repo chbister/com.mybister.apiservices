@@ -76,7 +76,10 @@ class ServiceRecord:
             return STATUS_CONFLICT
         if not self.exists:
             return "missing"
-        if self.expected_host and not same_name(self.target, self.expected_host):
+        # Exact comparison on purpose: a stored value without the trailing
+        # dot ("b03.mybister.com") differs from the expected absolute value
+        # ("b03.mybister.com.") and must be reported so it gets rewritten.
+        if self.expected_host and self.target != self.expected_host:
             return "differs"
         return "present"
 
@@ -221,10 +224,12 @@ class HetznerDNSManager:
         if not records:
             return None
         first = records[0]
-        value = str(first.get("value", "")).strip().lower() if isinstance(first, dict) else str(first)
-        # CNAME values are reported absolute (with trailing dot), matching
-        # what the tool writes and what the API returns.
-        return to_absolute(value) or None
+        value = str(first.get("value", "")).strip().lower() if isinstance(first, dict) else str(first).strip().lower()
+        # The stored value is reported verbatim (only case/space normalized).
+        # A missing trailing dot is a real difference that has to be fixed by
+        # an explicit write, so it must stay visible here - never normalize
+        # it away, or dotless records would look "unchanged" forever.
+        return value or None
 
     @staticmethod
     def _all_targets(rrset: Dict[str, object]) -> List[str]:
@@ -234,7 +239,7 @@ class HetznerDNSManager:
                 value = str(record.get("value", ""))
             else:
                 value = str(record)
-            value = to_absolute(value.strip().lower())
+            value = value.strip().lower()
             if value:
                 values.append(value)
         return values
@@ -323,8 +328,11 @@ class HetznerDNSManager:
                 message="CNAME fehlt und wird erstellt",
                 policy=policy,
             )
+        # Exact comparison: the stored value must match the desired absolute
+        # value character by character - a missing trailing dot counts as a
+        # divergence here and is only fixed with an explicit write.
         current = (record.target or "").lower()
-        if same_name(current, desired):
+        if current == desired:
             return ChangeResult(
                 service_id=normalized_id,
                 fqdn=fqdn,
