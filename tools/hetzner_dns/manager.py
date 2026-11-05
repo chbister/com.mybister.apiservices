@@ -35,7 +35,7 @@ from .errors import (
     ValidationError,
 )
 from .registry import ServiceRegistry
-from .validators import normalize_target_host, validate_service_id
+from .validators import normalize_target_host, same_name, to_absolute, validate_service_id
 
 logger = logging.getLogger("tools.hetzner_dns.manager")
 
@@ -76,7 +76,7 @@ class ServiceRecord:
             return STATUS_CONFLICT
         if not self.exists:
             return "missing"
-        if self.expected_host and self.target != self.expected_host:
+        if self.expected_host and not same_name(self.target, self.expected_host):
             return "differs"
         return "present"
 
@@ -221,17 +221,20 @@ class HetznerDNSManager:
         if not records:
             return None
         first = records[0]
-        value = str(first.get("value", "")).strip().lower().rstrip(".") if isinstance(first, dict) else str(first)
-        return value or None
+        value = str(first.get("value", "")).strip().lower() if isinstance(first, dict) else str(first)
+        # CNAME values are reported absolute (with trailing dot), matching
+        # what the tool writes and what the API returns.
+        return to_absolute(value) or None
 
     @staticmethod
     def _all_targets(rrset: Dict[str, object]) -> List[str]:
         values: List[str] = []
         for record in rrset.get("records") or []:
             if isinstance(record, dict):
-                value = str(record.get("value", "")).strip().lower().rstrip(".")
+                value = str(record.get("value", ""))
             else:
-                value = str(record).strip().lower().rstrip(".")
+                value = str(record)
+            value = to_absolute(value.strip().lower())
             if value:
                 values.append(value)
         return values
@@ -252,7 +255,7 @@ class HetznerDNSManager:
             ttl=int(cname.get("ttl")) if cname is not None and cname.get("ttl") is not None else None,
             conflict_types=conflict_types,
             conflict_targets=conflict_targets,
-            expected_host=self.config.default_docker_host,
+            expected_host=to_absolute(self.config.default_docker_host) if self.config.default_docker_host else None,
         )
 
     # ------------------------------------------------------------------ #
@@ -286,8 +289,9 @@ class HetznerDNSManager:
             raise ValidationError(f"Unbekannte Ueberschreib-Richtlinie '{policy}'")
         normalized_id = validate_service_id(service_id)
         fqdn = self.fqdn(normalized_id)
-        desired = self.normalize_host(host)
-        if desired == fqdn:
+        # The desired CNAME value is absolute (trailing dot), e.g. b03.mybister.com.
+        desired = to_absolute(self.normalize_host(host))
+        if same_name(desired, fqdn):
             raise ValidationError(
                 f"Zielhost darf nicht dem eigenen DNS-Namen '{fqdn}' entsprechen"
             )
@@ -320,7 +324,7 @@ class HetznerDNSManager:
                 policy=policy,
             )
         current = (record.target or "").lower()
-        if current == desired:
+        if same_name(current, desired):
             return ChangeResult(
                 service_id=normalized_id,
                 fqdn=fqdn,
@@ -382,7 +386,7 @@ class HetznerDNSManager:
                         service_id=service.id,
                         fqdn=f"{service.id}.{self.config.service_domain}",
                         status=STATUS_FAILED,
-                        target=normalized_host,
+                        target=to_absolute(normalized_host),
                         message=str(exc),
                         policy=policy,
                     )
@@ -438,12 +442,13 @@ class HetznerDNSManager:
         fqdn = plan.fqdn
         if plan.status == STATUS_CREATED:
             logger.info("%s: erstelle CNAME -> %s", fqdn, plan.target)
+            # The wire value must be absolute: "b03.mybister.com."
             rrset = self._client.create_rrset(
                 zone,
                 fqdn,
                 "CNAME",
                 ttl=self.config.ttl,
-                records=[{"value": plan.target}],
+                records=[{"value": to_absolute(plan.target)}],
             )
             target = self._target_of(rrset) or plan.target
             ttl = int(rrset.get("ttl")) if rrset.get("ttl") is not None else self.config.ttl
@@ -461,7 +466,10 @@ class HetznerDNSManager:
 
         if plan.status == STATUS_UPDATED:
             logger.info("%s: aktualisiere CNAME %s -> %s", fqdn, plan.current_target, plan.target)
-            self._client.set_rrset_records(zone, fqdn, "CNAME", records=[{"value": plan.target}])
+            # The wire value must be absolute: "b03.mybister.com."
+            self._client.set_rrset_records(
+                zone, fqdn, "CNAME", records=[{"value": to_absolute(plan.target)}]
+            )
             ttl = current.ttl
             if self.config.ttl and ttl != self.config.ttl:
                 self._client.change_rrset_ttl(zone, fqdn, "CNAME", ttl=self.config.ttl)

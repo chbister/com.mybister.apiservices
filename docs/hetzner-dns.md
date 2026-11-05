@@ -6,10 +6,19 @@ API-Microservices in der Hetzner-Cloud-DNS-Zone `mybister.com`.
 Jeder eigenständig deploybare Service erhält einen CNAME der Form:
 
 ```
-<service-id>.api.mybister.com   CNAME   <host>.mybister.com
+<service-id>.api.mybister.com   CNAME   <host>.mybister.com.
 ```
 
-Beispiel: `asr-small.api.mybister.com → b03.mybister.com`
+Beispiel: `asr-small.api.mybister.com → b03.mybister.com.`
+
+> **Absolute CNAME-Werte:** Der CNAME-Wert wird zwingend mit
+> abschließendem Punkt geschrieben (DNS-Wire-Format), also
+> `b03.mybister.com.` – das gilt für Writes, Dry-Run-Ausgaben und
+> JSON-Felder (`target`, `current_target`, `expected_host`).
+> Eingaben (Umgebungsvariablen wie `DEFAULT_DOCKER_HOST`, `--host`,
+> Service-Argumente) werden **ohne** Punkt angegeben; ein mitgeliebter
+> Punkt wird akzeptiert und beim Einlesen entfernt. Bestehende Records
+> ohne Punkt werden beim Abgleich als identisch erkannt.
 
 Das Tool dient jetzt der initialen Bulk-Anlage und später dem automatischen
 Abgleich durch den ressourcenbasierten Multi-Host-Deployment-Scheduler.
@@ -64,6 +73,10 @@ HETZNER_DNS_TTL=60                    # TTL in Sekunden für neue/geänderte Rec
 API_SERVICES_DOMAIN=api.mybister.com  # Service-Domain (Default: api.mybister.com)
 DEFAULT_DOCKER_HOST=b03.mybister.com  # Erwarteter Ziel-Host für die Anzeige (Default: b03.mybister.com)
 ```
+
+> Alle Ziel-Angaben (Config und CLI-Eingaben) werden **ohne**
+> abschließenden Punkt geschrieben (`b03.mybister.com`); das Tool ergänzt
+> den Punkt beim Schreiben des CNAME-Wertes selbst (`b03.mybister.com.`).
 
 Optionale Variablen:
 
@@ -128,12 +141,12 @@ python -m tools.hetzner_dns list
 Ausgabe (Auszug):
 
 ```text
-SERVICE       DNS NAME                         TARGET          TTL  EXPECTED         STATUS
-------------  -------------------------------  --------------  ---  ---------------  --------
-asr-tiny      asr-tiny.api.mybister.com        b03.mybister.com  60  b03.mybister.com  PRESENT
-asr-small     asr-small.api.mybister.com       -                 -  b03.mybister.com  MISSING
-sentiment     sentiment.api.mybister.com       b01.mybister.com  60  b03.mybister.com  DIFFERS
-ocr           ocr.api.mybister.com             b03.mybister.com  60  b03.mybister.com  PRESENT
+SERVICE       DNS NAME                         TARGET             TTL  EXPECTED          STATUS
+------------  -------------------------------  -----------------  ---  ----------------  --------
+asr-tiny      asr-tiny.api.mybister.com        b03.mybister.com.  60   b03.mybister.com. PRESENT
+asr-small     asr-small.api.mybister.com       -                  -    b03.mybister.com. MISSING
+sentiment     sentiment.api.mybister.com       b01.mybister.com.  60   b03.mybister.com. DIFFERS
+ocr           ocr.api.mybister.com             b03.mybister.com.  60   b03.mybister.com. PRESENT
 ```
 
 - `PRESENT` = CNAME existiert und zeigt auf den erwarteten Host (`DEFAULT_DOCKER_HOST`)
@@ -156,7 +169,7 @@ python -m tools.hetzner_dns get asr-small
 Service: asr-small
 DNS:     asr-small.api.mybister.com
 Type:    CNAME
-Target:  b03.mybister.com
+Target:  b03.mybister.com.
 TTL:     60
 ```
 
@@ -172,12 +185,12 @@ python -m tools.hetzner_dns get asr-small --json
   "service_id": "asr-small",
   "fqdn": "asr-small.api.mybister.com",
   "type": "CNAME",
-  "target": "b03.mybister.com",
+  "target": "b03.mybister.com.",
   "ttl": 60,
   "exists": true,
   "conflict_types": [],
   "conflict_targets": [],
-  "expected_host": "b03.mybister.com",
+  "expected_host": "b03.mybister.com.",
   "status": "present"
 }
 ```
@@ -190,9 +203,10 @@ python -m tools.hetzner_dns set asr-small b02 --apply  # tatsächlich schreiben
 python -m tools.hetzner_dns set asr-small b02.mybister.com --apply
 ```
 
-Das Tool leitet daraus ab: `asr-small.api.mybister.com CNAME b02.mybister.com`.
+Das Tool leitet daraus ab: `asr-small.api.mybister.com CNAME b02.mybister.com.`
 Akzeptiert wird ein Kurz-Host (`b02` → `b02.mybister.com`) oder ein voller
-FQDN innerhalb der Zone.
+FQDN innerhalb der Zone – geschrieben wird der Wert immer absolut mit
+abschließendem Punkt (`b02.mybister.com.`).
 
 Verhalten:
 
@@ -220,10 +234,10 @@ python -m tools.hetzner_dns bulk --host b03 --apply --force
 Beispielausgabe (Dry-Run):
 
 ```text
-CREATE  asr-tiny.api.mybister.com    -> b03.mybister.com
-CREATE  asr-small.api.mybister.com   -> b03.mybister.com
-UPDATE  sentiment.api.mybister.com   -> b03.mybister.com
-SKIP    ocr.api.mybister.com         -> b03.mybister.com
+CREATE  asr-tiny.api.mybister.com    -> b03.mybister.com.
+CREATE  asr-small.api.mybister.com   -> b03.mybister.com.
+UPDATE  sentiment.api.mybister.com   -> b03.mybister.com.
+SKIP    ocr.api.mybister.com         -> b03.mybister.com.
 
 Summary:
 Create: 2
@@ -267,27 +281,27 @@ Alle 21 eigenständig deploybaren Services aus `tools/service_registry.json`:
 
 | Service-ID | DNS-Name | Typ | Ziel (initial) |
 |---|---|---|---|
-| `asr-tiny` | `asr-tiny.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `asr-small` | `asr-small.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `asr-medium` | `asr-medium.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `asr-large` | `asr-large.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `diarization` | `diarization.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `sentiment` | `sentiment.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `emotion` | `emotion.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `emotion-nuance` | `emotion-nuance.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `emotion-state` | `emotion-state.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `emotion-vibe` | `emotion-vibe.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `emotion-hate` | `emotion-hate.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `processor` | `processor.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `tts` | `tts.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `convert` | `convert.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `ocr` | `ocr.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `extraction` | `extraction.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `ner` | `ner.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `resume` | `resume.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `metadata` | `metadata.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `barcode` | `barcode.api.mybister.com` | CNAME | `b03.mybister.com` |
-| `qrcode` | `qrcode.api.mybister.com` | CNAME | `b03.mybister.com` |
+| `asr-tiny` | `asr-tiny.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `asr-small` | `asr-small.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `asr-medium` | `asr-medium.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `asr-large` | `asr-large.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `diarization` | `diarization.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `sentiment` | `sentiment.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `emotion` | `emotion.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `emotion-nuance` | `emotion-nuance.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `emotion-state` | `emotion-state.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `emotion-vibe` | `emotion-vibe.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `emotion-hate` | `emotion-hate.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `processor` | `processor.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `tts` | `tts.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `convert` | `convert.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `ocr` | `ocr.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `extraction` | `extraction.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `ner` | `ner.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `resume` | `resume.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `metadata` | `metadata.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `barcode` | `barcode.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `qrcode` | `qrcode.api.mybister.com` | CNAME | `b03.mybister.com.` |
 
 Skalierte Replikate (`--scale barcode=2`, `--scale metadata=2`) teilen sich
 jeweils **eine** Service-ID und erhalten **einen** CNAME.

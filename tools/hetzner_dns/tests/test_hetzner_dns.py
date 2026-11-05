@@ -375,7 +375,7 @@ def test_missing_cname_is_detected_in_plan():
     manager = make_manager(fake)
     change = manager.plan_service_record("asr-small", "b03")
     assert change.status == STATUS_CREATED
-    assert change.target == "b03.mybister.com"
+    assert change.target == "b03.mybister.com."  # CNAME values are absolute
     assert change.applied is False
     assert write_requests(fake) == []
 
@@ -386,10 +386,12 @@ def test_missing_cname_is_created_with_apply():
     change = manager.ensure_service_record("asr-small", "b03", apply=True)
     assert change.status == STATUS_CREATED
     assert change.applied is True
-    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com"
+    # the wire value must be absolute (trailing dot)
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
     creates = [r for r in fake.write_requests if r["path"].endswith("/rrsets")]
     assert len(creates) == 1
     assert creates[0]["body"]["ttl"] == 60
+    assert creates[0]["body"]["records"] == [{"value": "b03.mybister.com."}]
 
 
 # --------------------------------------------------------------------------- #
@@ -406,6 +408,21 @@ def test_identical_cname_is_unchanged_and_not_written():
     assert write_requests(fake) == []
 
 
+def test_api_value_with_trailing_dot_is_recognized_as_unchanged():
+    """The API returns absolute CNAME values; they must compare as equal."""
+    fake = FakeHetznerAPI(
+        rrsets=[
+            {"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com."}], "ttl": 60}
+        ]
+    )
+    manager = make_manager(fake)
+    change = manager.ensure_service_record("asr-small", "b03", apply=True)
+    assert change.status == STATUS_UNCHANGED
+    assert change.target == "b03.mybister.com."
+    assert change.current_target == "b03.mybister.com."
+    assert write_requests(fake) == []
+
+
 # --------------------------------------------------------------------------- #
 # 4: diverging CNAME is updated by single "set"
 # --------------------------------------------------------------------------- #
@@ -417,8 +434,11 @@ def test_diverging_cname_is_updated_by_set():
     change = manager.ensure_service_record("asr-small", "b02", apply=True)
     assert change.status == STATUS_UPDATED
     assert change.applied is True
-    assert fake.cname_target("asr-small.api.mybister.com") == "b02.mybister.com"
+    assert fake.cname_target("asr-small.api.mybister.com") == "b02.mybister.com."
     assert any(r["path"].endswith("/actions/set_records") for r in fake.write_requests)
+    # the set_records payload carries the absolute value
+    set_records = [r for r in fake.write_requests if r["path"].endswith("/actions/set_records")]
+    assert set_records[0]["body"]["records"] == [{"value": "b02.mybister.com."}]
     # TTL drift is converged to the configured value as part of the update
     assert fake.rrsets[("asr-small.api.mybister.com", "CNAME")]["ttl"] == 60
 
@@ -452,7 +472,8 @@ def test_bulk_apply_creates_missing_cnames():
     assert by_id["asr-tiny"].status == STATUS_CREATED
     assert by_id["asr-small"].status == STATUS_CREATED
     assert by_id["sentiment"].status == STATUS_UNCHANGED
-    assert fake.cname_target("asr-tiny.api.mybister.com") == "b03.mybister.com"
+    assert fake.cname_target("asr-tiny.api.mybister.com") == "b03.mybister.com."
+    # seeded without a dot and never written -> stored value stays as-is
     assert fake.cname_target("sentiment.api.mybister.com") == "b03.mybister.com"
     assert len([r for r in fake.write_requests if r["path"].endswith("/rrsets")]) == 2
 
@@ -471,11 +492,11 @@ def test_bulk_without_force_reports_conflict_and_does_not_write():
     results = manager.apply_bulk(plan)
     by_id = {r.service_id: r for r in results}
     assert by_id["asr-small"].status == STATUS_CONFLICT
-    assert by_id["asr-small"].current_target == "b01.mybister.com"
+    assert by_id["asr-small"].current_target == "b01.mybister.com."  # reported absolute
     assert by_id["asr-tiny"].status == STATUS_CREATED
     # the diverging record stays untouched, only missing ones are created
     assert fake.cname_target("asr-small.api.mybister.com") == "b01.mybister.com"
-    assert fake.cname_target("asr-tiny.api.mybister.com") == "b03.mybister.com"
+    assert fake.cname_target("asr-tiny.api.mybister.com") == "b03.mybister.com."
     assert not any("set_records" in r["path"] for r in fake.write_requests)
 
 
@@ -493,7 +514,7 @@ def test_bulk_with_force_updates_diverging_cnames():
     by_id = {r.service_id: r for r in results}
     assert by_id["asr-small"].status == STATUS_UPDATED
     assert by_id["asr-small"].applied is True
-    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com"
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
 
 
 # --------------------------------------------------------------------------- #
@@ -591,7 +612,7 @@ def test_short_host_is_expanded_to_zone(monkeypatch, capsys):
     fake = FakeHetznerAPI()
     code, out, _err = run_cli(["set", "asr-small", "b02"], fake, monkeypatch, capsys)
     assert code == cli.EXIT_OK
-    assert "b02.mybister.com" in out
+    assert "Target:  b02.mybister.com." in out  # dry run shows the absolute value
     assert write_requests(fake) == []  # dry run
 
 
@@ -700,7 +721,7 @@ def test_async_action_is_awaited():
     assert change.applied is True
     action_polls = [r for r in fake.requests if "/actions/" in r["path"]]
     assert action_polls, "async action must be polled"
-    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com"
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
 
 
 def test_async_action_error_is_reported_as_failure():
@@ -740,12 +761,12 @@ def test_json_output_is_valid(monkeypatch, capsys):
         "service_id": "asr-small",
         "fqdn": "asr-small.api.mybister.com",
         "type": "CNAME",
-        "target": "b03.mybister.com",
+        "target": "b03.mybister.com.",  # absolute, even though seeded without dot
         "ttl": 60,
         "exists": True,
         "conflict_types": [],
         "conflict_targets": [],
-        "expected_host": DEFAULT_HOST,
+        "expected_host": "b03.mybister.com.",
         "status": "present",
     }
 
@@ -763,6 +784,7 @@ def test_json_output_is_valid(monkeypatch, capsys):
     assert payload["status"] == STATUS_CREATED
     assert payload["applied"] is True
     assert payload["dry_run"] is False
+    assert payload["target"] == "b02.mybister.com."  # absolute value in JSON too
 
 
 def test_get_json_for_missing_record(monkeypatch, capsys):
@@ -897,7 +919,7 @@ def test_bulk_cli_dry_run_and_apply(monkeypatch, capsys):
     code, out, _err = run_cli(["bulk", "--host", "b03", "--apply"], fake, monkeypatch, capsys)
     assert code == cli.EXIT_OK
     assert "Applied." in out
-    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com"
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
 
 
 def test_bulk_cli_conflict_exit_code(monkeypatch, capsys):
@@ -911,7 +933,7 @@ def test_bulk_cli_conflict_exit_code(monkeypatch, capsys):
 
     code, out, _err = run_cli(["bulk", "--host", "b03", "--apply", "--force"], fake, monkeypatch, capsys)
     assert code == cli.EXIT_OK
-    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com"
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
 
 
 def test_set_conflict_with_foreign_record_exits_conflict(monkeypatch, capsys):
@@ -940,7 +962,7 @@ def test_list_shows_expected_host_and_status(monkeypatch, capsys):
     code, out, _err = run_cli(["list"], fake, monkeypatch, capsys)
     assert code == cli.EXIT_OK
     assert "EXPECTED" in out
-    assert "b03.mybister.com" in out
+    assert "b03.mybister.com." in out  # expected host is reported absolute
     assert "DIFFERS" in out
     assert "MISSING" in out
 

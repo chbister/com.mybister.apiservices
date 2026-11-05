@@ -2,9 +2,13 @@
 
 Manages records of the form::
 
-    <service-id>.api.mybister.com  CNAME  <host>.mybister.com
+    <service-id>.api.mybister.com  CNAME  <host>.mybister.com.
 
 against the Hetzner Cloud API (``https://api.hetzner.cloud/v1``).
+
+CNAME values are always written absolute (trailing dot,
+``b03.mybister.com.``); inputs (env vars, ``host`` arguments) are given
+without a dot and are normalized by the tool.
 
 Library usage (no CLI/subprocess needed)::
 

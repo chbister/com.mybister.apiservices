@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Optional
 
 from .errors import ValidationError
 
@@ -50,6 +51,28 @@ def validate_service_id(service_id: str) -> str:
 def validate_zone(zone: str, what: str = "HETZNER_DNS_ZONE") -> str:
     """Validate the DNS zone name."""
     return validate_domain(zone, what)
+
+
+def to_absolute(name: str) -> str:
+    """Return the root-anchored form of a DNS name: a trailing dot.
+
+    CNAME values in the Hetzner Cloud API (and in DNS wire format in
+    general) must be absolute, e.g. ``b03.mybister.com.``. Values without
+    a trailing dot are accepted on read for tolerance, but everything
+    this tool writes or reports as a CNAME value is absolute.
+    """
+    value = (name or "").strip()
+    if not value:
+        return value
+    return value if value.endswith(".") else value + "."
+
+
+def same_name(left: Optional[str], right: Optional[str]) -> bool:
+    """Compare two DNS names ignoring case and an optional trailing dot."""
+    def bare(value: Optional[str]) -> str:
+        return (value or "").strip().rstrip(".").lower()
+
+    return bare(left) == bare(right)
 
 
 def normalize_target_host(host: str, *, zone: str, service_domain: str, what: str = "Zielhost") -> str:
