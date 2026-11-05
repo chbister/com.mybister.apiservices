@@ -5,128 +5,107 @@
     {
       "id": "asr-tiny",
       "description": "Speech-to-Text (Whisper tiny)",
-      "compose_service": "asr-tiny",
-      "path": "/asr-tiny"
+      "compose_service": "asr-tiny"
     },
     {
       "id": "asr-small",
       "description": "Speech-to-Text (Whisper small)",
-      "compose_service": "asr-small",
-      "path": "/asr-small"
+      "compose_service": "asr-small"
     },
     {
       "id": "asr-medium",
       "description": "Speech-to-Text (Whisper medium)",
-      "compose_service": "asr-medium",
-      "path": "/asr-medium"
+      "compose_service": "asr-medium"
     },
     {
       "id": "asr-large",
       "description": "Speech-to-Text (Whisper large-v3)",
-      "compose_service": "asr-large",
-      "path": "/asr-large"
+      "compose_service": "asr-large"
     },
     {
       "id": "diarization",
       "description": "Sprecher-Diarization",
-      "compose_service": "diarization",
-      "path": "/diarization"
+      "compose_service": "diarization"
     },
     {
       "id": "sentiment",
       "description": "Sentiment-Analyse",
-      "compose_service": "sentiment",
-      "path": "/sentiment"
+      "compose_service": "sentiment"
     },
     {
       "id": "emotion",
       "description": "Emotion-Erkennung (Standard-Modell)",
-      "compose_service": "emotion",
-      "path": "/emotion"
+      "compose_service": "emotion"
     },
     {
       "id": "emotion-nuance",
       "description": "Emotion-Erkennung (Nuance-Modell)",
-      "compose_service": "emotion-nuance",
-      "path": "/emotion-nuance"
+      "compose_service": "emotion-nuance"
     },
     {
       "id": "emotion-state",
       "description": "Emotion-Erkennung (State-Modell)",
-      "compose_service": "emotion-state",
-      "path": "/emotion-state"
+      "compose_service": "emotion-state"
     },
     {
       "id": "emotion-vibe",
       "description": "Emotion-Erkennung (Vibe-Modell)",
-      "compose_service": "emotion-vibe",
-      "path": "/emotion-vibe"
+      "compose_service": "emotion-vibe"
     },
     {
       "id": "emotion-hate",
       "description": "Emotion-/Hate-Speech-Erkennung",
-      "compose_service": "emotion-hate",
-      "path": "/emotion-hate"
+      "compose_service": "emotion-hate"
     },
     {
       "id": "debug-processor",
       "description": "Debug-Transkript-Processor / Aggregator",
-      "compose_service": "debug-processor",
-      "path": "/debug-processor"
+      "compose_service": "debug-processor"
     },
     {
       "id": "tts",
       "description": "Text-to-Speech",
-      "compose_service": "tts",
-      "path": "/tts"
+      "compose_service": "tts"
     },
     {
       "id": "convert",
       "description": "Audio-/Format-Konvertierung",
-      "compose_service": "convert",
-      "path": "/convert"
+      "compose_service": "convert"
     },
     {
       "id": "ocr",
       "description": "OCR (Texterkennung)",
-      "compose_service": "ocr",
-      "path": "/ocr"
+      "compose_service": "ocr"
     },
     {
       "id": "extraction",
       "description": "Text-Extraktion aus Dokumenten",
-      "compose_service": "extraction",
-      "path": "/extraction"
+      "compose_service": "extraction"
     },
     {
       "id": "ner",
       "description": "Named Entity Recognition",
-      "compose_service": "ner",
-      "path": "/ner"
+      "compose_service": "ner"
     },
     {
       "id": "resume",
       "description": "Lebenslauf-Parsing",
-      "compose_service": "resume",
-      "path": "/resume"
+      "compose_service": "resume"
     },
     {
       "id": "metadata",
       "description": "Metadaten-Extraktion",
-      "compose_service": "metadata",
-      "path": "/metadata"
+      "compose_service": "metadata"
     },
     {
       "id": "barcode",
       "description": "Barcode-Scanning (in prod skaliert auf 2 Replikate)",
-      "compose_service": "barcode",
-      "path": "/barcode"
+      "compose_service": "barcode"
     },
     {
       "id": "qrcode",
       "description": "QR-Code-Scanning",
-      "compose_service": "qrcode",
-      "path": "/qrcode"
+      "compose_service": "qrcode"
     }
   ],
   "excluded": [

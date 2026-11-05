@@ -295,10 +295,10 @@ def cmd_services(args: argparse.Namespace) -> int:
         return EXIT_OK
     service_domain = (os.environ.get("API_SERVICES_DOMAIN") or "api.mybister.com").strip()
     rows = [
-        [service.id, f"{service.id}.{service_domain}", service.path, service.description]
+        [service.id, f"{service.id}.{service_domain}", service.description]
         for service in registry
     ]
-    _print_table(["SERVICE", "DNS NAME", "PATH", "DESCRIPTION"], rows)
+    _print_table(["SERVICE", "DNS NAME", "DESCRIPTION"], rows)
     if registry.excluded:
         print("\nNicht verwaltet (kein CNAME):")
         for excluded in registry.excluded:

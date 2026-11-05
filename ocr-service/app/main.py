@@ -194,8 +194,8 @@ async def process_image(
         content={
             "job_id": job_id,
             "status": "queued",
-            "status_url": f"/ocr/v1/ocr/status/{job_id}",
-            "download_url": f"/ocr/v1/ocr/download/{job_id}",
+            "status_url": f"/v1/ocr/status/{job_id}",
+            "download_url": f"/v1/ocr/download/{job_id}",
             "callback_url": callback_url,
             "message": "Job accepted and enqueued."
         }

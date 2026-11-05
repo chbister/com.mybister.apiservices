@@ -54,9 +54,9 @@ DEFAULT_HOST = "b03.mybister.com"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 SMALL_SERVICES = (
-    ServiceDefinition(id="asr-tiny", description="ASR tiny", path="/asr-tiny"),
-    ServiceDefinition(id="asr-small", description="ASR small", path="/asr-small"),
-    ServiceDefinition(id="sentiment", description="Sentiment", path="/sentiment"),
+    ServiceDefinition(id="asr-tiny", description="ASR tiny"),
+    ServiceDefinition(id="asr-small", description="ASR small"),
+    ServiceDefinition(id="sentiment", description="Sentiment"),
 )
 
 
@@ -902,9 +902,13 @@ def test_registry_contains_no_duplicate_ids():
 # 20: registry matches the central service configuration (docker-compose.yml)
 # --------------------------------------------------------------------------- #
 def _compose_routers_with_host() -> set:
-    """Router names with a Traefik ``Host(...) && PathPrefix(...)`` rule."""
+    """Router names with a Traefik ``Host(...)`` rule (production routers).
+
+    Development routers are path-based (``PathPrefix`` without ``Host``) and
+    are therefore not matched here.
+    """
     compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-    pattern = re.compile(r"traefik\.http\.routers\.([A-Za-z0-9_-]+)\.rule=Host\(`[^`]+`\) && PathPrefix\(")
+    pattern = re.compile(r"traefik\.http\.routers\.([A-Za-z0-9_-]+)\.rule=Host\(`[^`]+`\)")
     names = set()
     for line in compose.splitlines():
         if line.lstrip().startswith("#"):
@@ -929,6 +933,34 @@ def test_registry_matches_docker_compose_services():
         f"tools/service_registry.json ergaenzen): {sorted(missing_in_registry)}"
     )
     assert routers - set(registry.ids) == {"callback-tester"}
+
+
+def test_prod_routers_use_dedicated_service_hosts():
+    """Every production router must use its own <service-id>.api.mybister.com host.
+
+    The former shared hosts (ask.mybister.com, ask.vereinstalk.de) and the
+    PathPrefix routing were removed by the HTTPS conversion; development
+    routers stay path-based and carry no Host rule at all.
+    """
+    compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    pattern = re.compile(r"traefik\.http\.routers\.([A-Za-z0-9_-]+)\.rule=Host\(`([^`]+)`\)")
+    checked = 0
+    for line in compose.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        match = pattern.search(line)
+        if not match:
+            continue
+        name, host = match.groups()
+        assert host == f"{name}.api.mybister.com", (
+            f"Router {name} nutzt noch den Host {host!r} statt "
+            f"{name}.api.mybister.com"
+        )
+        checked += 1
+    assert checked == len(_compose_routers_with_host())
+    assert checked >= 21
+    assert "ask.mybister.com" not in compose
+    assert "ask.vereinstalk.de" not in compose
 
 
 def test_registry_excludes_documented_components():

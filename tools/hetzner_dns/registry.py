@@ -29,14 +29,12 @@ class ServiceDefinition:
     id: str
     description: str = ""
     compose_service: str = ""
-    path: str = ""
 
     def to_dict(self) -> Dict[str, str]:
         return {
             "id": self.id,
             "description": self.description,
             "compose_service": self.compose_service,
-            "path": self.path,
         }
 
 
@@ -124,7 +122,6 @@ class ServiceRegistry:
                     id=str(entry["id"]),
                     description=str(entry.get("description", "")),
                     compose_service=str(entry.get("compose_service", "")),
-                    path=str(entry.get("path", "")),
                 )
             )
 

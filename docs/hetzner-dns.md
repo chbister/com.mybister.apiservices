@@ -520,7 +520,8 @@ paralleler Prozess denselben Namen ändern. Empfohlen:
 Grundlage ist die zentrale, deklarative Registry **`tools/service_registry.json`**
 (einzige Quelle für das Tool; später auch für Deployment/Ressourcenplanung).
 Alle 21 vorab genannten Service-IDs existieren als eigenständig deploybare
-Services in `docker-compose.yml` (Traefik-Regel `Host(...) && PathPrefix(...)`)
+Services in `docker-compose.yml` (Traefik-Regel `Host(\`<service-id>.api.mybister.com\`)`,
+hostname-basiertes HTTPS-Routing ohne PathPrefix)
 und sind unverändert übernommen:
 
 `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `sentiment`,

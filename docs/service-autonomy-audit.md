@@ -1,15 +1,20 @@
 # Audit der Service-Autarkie (Analysebericht)
 
-> **Status:** Analyse abgeschlossen, **keine** funktionalen Änderungen umgesetzt.
+> **Status:** Analyse abgeschlossen; Umsetzung der Entscheidungen T1/T2 in den Nachträgen.
 > **Nachtrag T1:** Die reine Umbenennung `processor` → `debug-processor` wurde auf dem
 > Branch `feature/debug-processor-rename` umgesetzt (benennungs- und routingrein, keine
 > funktionalen Abhängigkeiten verändert) – siehe Abschnitt 6.
+> **Nachtrag T2:** Die HTTPS-Umstellung auf dedizierte Service-Hosts
+> (`<service-id>.api.mybister.com`, hostname-basiert ohne PathPrefix/StripPrefix) wurde auf
+> dem Branch `feature/https-service-urls` umgesetzt; beide ask-Hosts sind aus der Compose
+> entfernt. Dev-Routing (localhost, pfadbasiert) bleibt unverändert – siehe Abschnitt 6.
 > **Datum:** 05.11.2026
 > **Grenze:** Diese Prüfung bewertet und dokumentiert ausschließlich. Es wurden keine
 > funktionalen Abhängigkeiten entfernt, keine Workflows umstrukturiert und keine
-> Service-Verantwortlichkeiten verändert. Empfehlungen sind **nicht** implementiert.
-> **Abgrenzung:** Die beauftragte HTTPS-Umstellung (dedizierte HTTPS-Service-URLs,
-> Traefik-Routing, API-Header-Auth) bleibt Teil der Implementierung – siehe Abschnitt 10.
+> Service-Verantwortlichkeiten verändert. Empfehlungen sind grundsätzlich **nicht**
+> implementiert (Ausnahme R1: explizite Festlegung der 6 Debug-Processor-URLs im Zuge von T2).
+> **Abgrenzung:** Die HTTPS-Umstellung (dedizierte HTTPS-Service-URLs, Traefik-Routing,
+> API-Header-Auth) ist umgesetzt – siehe Abschnitt 10.
 
 ---
 
@@ -80,8 +85,9 @@ Die getroffenen Entscheidungen sind im **Entscheidungsprotokoll** (Abschnitt 6) 
 
 9. **Sind Service-URLs und Zugangsdaten konfigurierbar?**
    Model-IDs, Secrets (`HF_TOKEN`, `CALLBACK_AUTH_SECRET`, `API_KEY`) und alle
-   Service-URLs sind prinzipiell per Env konfigurierbar. Die 6 Processor-URLs werden in
-   der Compose allerdings **nicht gesetzt** – sie sind damit faktisch hardcoded (T1).
+   Service-URLs sind prinzipiell per Env konfigurierbar. Die 6 Debug-Processor-URLs sind in
+   der Compose inzwischen **explizit gesetzt** (interne Docker-DNS-Adressen); ein Umzug auf
+   HTTPS-Endpunkte ist reine Env-Änderung (R1).
 
 10. **Könnte der Service ohne Codeänderung auf einen anderen Docker-Host verschoben werden?**
     Bedingt:
@@ -108,7 +114,7 @@ Die getroffenen Entscheidungen sind im **Entscheidungsprotokoll** (Abschnitt 6) 
 | emotion-vibe | Ja | Ja | keine ausgehend; wird von processor gerufen | Ja² | – |
 | emotion-state | Ja | Ja | keine ausgehend; wird von processor gerufen | Ja² | – |
 | emotion-hate | Ja | Ja | keine ausgehend; **nicht** von processor genutzt | Ja² | Design-Lücke dokumentieren (P7) |
-| debug-processor *(vormals processor)* | Ja | **Nein**³ | ruft sentiment, emotion(base/nuance/vibe/state), ner auf (Docker-DNS-Defaults) | **Nein ohne Konfig**⁴ | Umbenennung umgesetzt (T1); 6 `*_URL`-Variablen bei der HTTPS-Umstellung setzen |
+| debug-processor *(vormals processor)* | Ja | **Nein**³ | ruft sentiment, emotion(base/nuance/vibe/state), ner auf (Docker-DNS-Defaults) | **Nein ohne Konfig**⁴ | Umbenennung (T1) und 6 explizite `*_URL`-Variablen (R1) umgesetzt; HTTPS-Umschaltung optional |
 | tts | Ja | Ja | keine | Ja² | – |
 | convert | Ja | Ja | keine | Ja² | nur `edge`-Netz, kein `app`-Netz |
 | ocr | Ja | **Nein**⁵ | zwingend `ocr-worker` über Volume-Queue `ocr_jobs` | **Nein**⁶ | Worker-Pflichtigkeit dokumentieren (P2) |
@@ -125,8 +131,8 @@ Die getroffenen Entscheidungen sind im **Entscheidungsprotokoll** (Abschnitt 6) 
 ² Nur optionale Model-Cache-Volumes; ohne Cache läuft der Service, nur langsamer beim ersten Start.
 ³ Start/Health sind autark; die Kernfunktion liefert ohne die 6 Downstreams nur partielle
   Ergebnisse (Fehler werden toleriert, keine Crashes).
-⁴ Die 6 URL-Defaults (`http://sentiment:8000/…`) existieren nur im Compose-Netz; ein Umzug
-  verlangt gesetzte `SENTIMENT_URL`, `EMOTION_*_URL`, `NER_URL`.
+⁴ Die 6 URL-Werte (`http://sentiment:8000/…`) existieren nur im Compose-Netz; sie sind in
+  der Compose **explizit gesetzt** – ein Umzug auf HTTPS-Endpunkte ist reine Env-Änderung.
 ⁵ `/v1/ocr` ausschließlich als Async-Queue (HTTP 202, Status `queued`); ohne Worker passiert
   nie etwas.
 ⁶ Die Job-Queue ist ein host-lokales Dateisystem-Volume; der Worker muss denselben Host/das
@@ -139,9 +145,9 @@ funktional Teil des ocr-Deployments.
 
 ## 4. Antworten zu Multi-Host und Konfigurierbarkeit (Kurzfassung)
 
-- **Öffentliche Adresse:** künftig einheitlich `<service-id>.api.mybister.com`
+- **Öffentliche Adresse:** einheitlich `<service-id>.api.mybister.com`
   (DNS-CNAMEs über `tools/hetzner_dns` verwaltet). Die Host-Regeln
-  `ask.mybister.com` und `ask.vereinstalk.de` sind damit **obsolet** (T2).
+  `ask.mybister.com` und `ask.vereinstalk.de` sind **entfernt** (T2, umgesetzt).
 - **Ports:** kein Service veröffentlicht Ports; alles läuft über Traefik im `edge`-Netz.
 - **Secrets/Model-IDs:** vollständig per Env konfiguriert (`.env` bzw. Compose).
 - **Service-URLs:** nur `processor` hat welche – konfigurierbar, aktuell aber ungesetzt.
@@ -155,7 +161,7 @@ funktional Teil des ocr-Deployments.
 | # | Befund | Bewertung | Status |
 |---|---|---|---|
 | T1 | processor-Defaults `http://<service>:8000/…` (Docker-DNS); Kommentar verweist auf Aliase, Code nutzt Service-Namen | möglicherweise vermeidbar | ✅ umgesetzt: Debug-Dienst, umbenannt zu `debug-processor` (siehe Abschnitt 6) |
-| T2 | Host-Regeln `ask.mybister.com` (18 Services) bzw. `ask.vereinstalk.de` (ocr, extraction) | notwendig heute | ✅ entschieden: obsolet, werden entfernt; künftig nur `<service-id>.api.mybister.com` |
+| T2 | Host-Regeln `ask.mybister.com` (18 Services) bzw. `ask.vereinstalk.de` (ocr, extraction) | notwendig heute | ✅ umgesetzt: nur noch `Host(\`<service-id>.api.mybister.com\`)`, beide ask-Hosts entfernt (Branch `feature/https-service-urls`) |
 | T3 | External-Netz `edge` (`EDGE_NETWORK_NAME`, Default `dev-shared-network`), geteilt mit fremden Stacks | notwendig fürs Routing | ✅ entschieden: bleibt unverändert |
 | T4 | `*-link`-Aliase in der Compose, im Code ungenutzt | möglicherweise vermeidbar (tote Konfiguration) | ⏳ später |
 | T5 | `traefik-dev` bindet docker.sock über host-spezifischen OrbStack-Pfad | vermeidbar (dev-only) | ⏳ später |
@@ -165,7 +171,7 @@ funktional Teil des ocr-Deployments.
 
 | # | Befund | Bewertung | Status |
 |---|---|---|---|
-| F1 | `processor` → `sentiment` + `emotion` (base/nuance/vibe/state) + `ner`, parallel via `asyncio.gather(..., return_exceptions=True)`; Ausfälle werden zu `null` toleriert | notwendig für das Kernfeature (Ausfall = Qualitätseinbruch, kein Crash) | dokumentiert; Transportadressen werden bei HTTPS-Umstellung auf die neuen HTTPS-Endpunkte umgestellt |
+| F1 | `processor` → `sentiment` + `emotion` (base/nuance/vibe/state) + `ner`, parallel via `asyncio.gather(..., return_exceptions=True)`; Ausfälle werden zu `null` toleriert | notwendig für das Kernfeature (Ausfall = Qualitätseinbruch, kein Crash) | Transportadressen in der Compose explizit festgelegt (interne Docker-DNS-Adressen); Umstellung auf HTTPS-Endpunkte jederzeit per Env möglich, fachliche Kette unverändert |
 | F2 | `ocr`-API → `ocr-worker` (Filesystem-Queue, kein Sync-Pfad) | notwendig für Async-OCR; der Mechanismus (FS-Queue) ist möglicherweise vermeidbar | dokumentiert (P2), keine Änderung |
 | F3 | Sonstige Service-zu-Service-Calls | **keine vorhanden** | – |
 
@@ -187,7 +193,7 @@ funktional Teil des ocr-Deployments.
 | # | Befund | Entscheidung | Status |
 |---|---|---|---|
 | T1 | processor-Defaults hardcoded | Der Service dient dem **Debugging** und wurde zur Klarstellung zu **`debug-processor`** umbenannt; URL-Klarheit herstellen | ✅ umgesetzt (Branch `feature/debug-processor-rename`); URL-Klarheit Teil der HTTPS-Umstellung (R1) |
-| T2 | Host-Regeln `ask.mybister.com`, `ask.vereinstalk.de` | **Obsolet** – künftig nur `<service-id>.api.mybister.com`; beide ask-Hosts werden **entfernt** (Teil der HTTPS-Umstellung) | ✅ entschieden |
+| T2 | Host-Regeln `ask.mybister.com`, `ask.vereinstalk.de` | **Obsolet** – nur noch `<service-id>.api.mybister.com`; beide ask-Hosts entfernt (Teil der HTTPS-Umstellung) | ✅ umgesetzt (Branch `feature/https-service-urls`) |
 | T3 | External-Netz `edge` | **Bleibt unverändert** | ✅ akzeptiert |
 | T4 | `*-link`-Aliase (im Code ungenutzt) | Später prüfen | ⏳ aufgeschoben |
 | T5 | docker.sock-Pfad in `traefik-dev` (dev-only) | Später | ⏳ aufgeschoben |
@@ -199,7 +205,8 @@ funktional Teil des ocr-Deployments.
 - ⏳ DNS-CNAME `debug-processor.api.mybister.com` neu anlegen (`processor.api.mybister.com`
   ggf. entfernen) – **keine** produktiven DNS-Änderungen ohne expliziten `--apply`-Lauf;
   Ausführung durch den Nutzer
-- ✅ Traefik-Router/PathPrefix `/debug-processor` in `docker-compose.yml`
+- ✅ Traefik-Router `Host(\`debug-processor.api.mybister.com\`)` in `docker-compose.yml`
+  (hostname-basiertes HTTPS-Routing, T2)
 - ✅ Compose-Service-Name und zugehörige `-dev`-/Builder-Einträge
 - ✅ `tests/test_services.py` / `tests/conftest.py` (`SERVICES`-Liste)
 - ✅ README- und Doku-Verweise
@@ -222,9 +229,10 @@ funktional Teil des ocr-Deployments.
 
 ## 8. Empfehlungen (nicht implementiert)
 
-1. **R1** – `debug-processor`: die 6 `*_URL`-Variablen in der Compose explizit setzen;
-   bei der HTTPS-Umstellung auf die konfigurierbaren HTTPS-Endpunkte umstellen
-   (**Transportadresse ja, fachliche Kette unverändert**).
+1. **R1** – `debug-processor`: die 6 `*_URL`-Variablen in der Compose explizit setzen
+   (**erledigt**, interne Docker-DNS-Adressen); bei Bedarf jederzeit auf die
+   konfigurierbaren HTTPS-Endpunkte umstellen (**Transportadresse ja, fachliche Kette
+   unverändert**).
 2. **R2** – `asr_jobs`-Teilung: zunächst belassen (T6), später überdenken (P3).
 3. **R3** – OCR-Worker-Pflichtigkeit dokumentieren; prüfen, ob eine Warnung/Health-Metrik
    sinnvoll ist, wenn Jobs dauerhaft `queued` bleiben.
@@ -243,10 +251,10 @@ funktional Teil des ocr-Deployments.
 
 | # | Problem | Status |
 |---|---|---|
-| P1 | Debug-Zweck + hardcoded Docker-DNS-Adressen in `processor` | Umbenennung umgesetzt (T1); URL-Klarheit bei HTTPS-Umstellung offen (R1) |
+| P1 | Debug-Zweck + hardcoded Docker-DNS-Adressen in `processor` | Umbenennung (T1) und explizite URL-Festlegung (R1) umgesetzt; HTTPS-Umschaltung optional |
 | P2 | OCR-Async als Dateisystem-Queue zwischen zwei Containern → Host-Gebundenheit und stille Fehler ohne Worker | offen |
 | P3 | Gemeinsamer Job-Statusordner über 4 ASR-Modellvarianten | zunächst akzeptiert (T6) |
-| P4 | Routing aktuell über gemeinsamen Host + PathPrefix; Umstellung auf `<service-id>.api.mybister.com`, Entfernung beider ask-Hosts | Umstellungsmaßnahme (T2, Teil HTTPS-Umstellung) |
+| P4 | Routing über gemeinsamen Host + PathPrefix | umgesetzt (T2): `<service-id>.api.mybister.com`, ask-Hosts entfernt |
 | P5 | Externes, default-benanntes `edge`-Netz, geteilt mit fremden Stacks | entschieden: bleibt (T3) |
 | P6 | Gemeinsame Model-Caches und geteilte Secrets ohne Rotationskonzept | offen |
 | P7 | `emotion-hate` wird nicht in die processor-Aggregation einbezogen | offen |
@@ -257,17 +265,19 @@ funktional Teil des ocr-Deployments.
 
 ## 10. Abgrenzung zur HTTPS-Umstellung
 
-Die bereits beauftragte Umstellung auf dedizierte HTTPS-Service-URLs, Traefik-Routing und
-API-Header-Authentifizierung bleibt Bestandteil der Implementierung und wird durch dieses
-Audit **nicht** verändert:
+Die beauftragte Umstellung auf dedizierte HTTPS-Service-URLs, Traefik-Routing und
+API-Header-Authentifizierung ist umgesetzt (Branch `feature/https-service-urls`):
 
-- Bestehende Service-zu-Service-Aufrufe (allein `processor`) dürfen technisch auf die neuen
-  **konfigurierbaren HTTPS-Endpunkte** umgestellt werden (R1).
+- **Umgesetzt (T2):** Alle Prod-Router nutzen `Host(\`<service-id>.api.mybister.com\`)`
+  mit TLS/Let's Encrypt und `ForwardAuth`; PathPrefix/StripPrefix entfallen in der Prod
+  (das pfadbasierte Dev-Routing auf localhost bleibt unverändert). `ask.mybister.com` und
+  `ask.vereinstalk.de` sind aus der Compose entfernt.
+- **Service-zu-Service-Aufrufe** (allein `debug-processor`) laufen unverändert über die
+  internen Docker-DNS-Adressen; die 6 `*_URL`-Variablen sind explizit in der Compose
+  gesetzt und können bei Bedarf auf die HTTPS-Endpunkte umgestellt werden (R1).
 - Die zugrunde liegenden **funktionalen Abhängigkeiten und Verarbeitungsabläufe bleiben
-  unverändert** – es werden keine funktionalen Abhängigkeiten allein aufgrund dieser
+  unverändert** – es wurden keine funktionalen Abhängigkeiten allein aufgrund dieser
   Autarkieprüfung entfernt.
-- Die Host-Umstellung auf `<service-id>.api.mybister.com` inklusive Entfernung von
-  `ask.mybister.com` und `ask.vereinstalk.de` ist Teil dieser Umstellung (T2).
 
 Alle hier erkannten Architekturprobleme sind in Abschnitt 9 für eine **spätere gesonderte
 Entscheidung** dokumentiert.
