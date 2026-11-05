@@ -64,7 +64,13 @@ SMALL_SERVICES = (
 # fake Hetzner Cloud API
 # --------------------------------------------------------------------------- #
 class FakeHetznerAPI:
-    """In-memory implementation of the documented Hetzner DNS endpoints."""
+    """In-memory implementation of the documented Hetzner DNS endpoints.
+
+    Like the real API it resolves every RR set name **zone-relative**: the
+    zone name is appended to whatever name a request carries (``@`` is the
+    apex). A client sending a full FQDN therefore creates a doubled record
+    (``<fqdn>.<zone>``) - the tests rely on this to catch wrong wire names.
+    """
 
     def __init__(
         self,
@@ -102,6 +108,13 @@ class FakeHetznerAPI:
         self._method_failures: List[Tuple[str, object]] = []
 
     # -- seeding / scripting --------------------------------------------
+    def _resolve_name(self, name: str) -> str:
+        """Zone-relative name resolution of the real API (zone is appended)."""
+        bare = (name or "").strip().rstrip(".").lower()
+        if bare in ("", "@"):
+            return self.zone.lower()
+        return f"{bare}.{self.zone.lower()}"
+
     def add_rrset(self, name: str, type: str, *, records: List[Dict], ttl: int = 300) -> None:
         self.rrsets[(name.lower(), type.upper())] = {
             "id": f"{name}/{type}",
@@ -195,7 +208,7 @@ class FakeHetznerAPI:
                 return self._create_rrset(body)
             return self._error(405, "unsupported_error", "method not allowed")
 
-        name = parts[3]
+        name = self._resolve_name(parts[3])
         if len(parts) == 4:
             return self._error(404, "not_found", "record type required")
         rtype = parts[4].upper()
@@ -227,7 +240,7 @@ class FakeHetznerAPI:
         name_filter = query.get("name")
         type_filter = query.get("type")
         if name_filter:
-            items = [r for r in items if r["name"] == name_filter.lower()]
+            items = [r for r in items if r["name"] == self._resolve_name(name_filter)]
         if type_filter:
             items = [r for r in items if r["type"] == type_filter.upper()]
 
@@ -256,7 +269,7 @@ class FakeHetznerAPI:
         )
 
     def _create_rrset(self, body: Dict) -> httpx.Response:
-        name = body.get("name", "").lower()
+        name = self._resolve_name(body.get("name", ""))
         rtype = str(body.get("type", "")).upper()
         if (name, rtype) in self.rrsets:
             return self._error(422, "uniqueness_error", "rrset already exists")
@@ -462,6 +475,43 @@ def test_diverging_cname_is_updated_by_set():
     assert set_records[0]["body"]["records"] == [{"value": "b02.mybister.com."}]
     # TTL drift is converged to the configured value as part of the update
     assert fake.rrsets[("asr-small.api.mybister.com", "CNAME")]["ttl"] == 60
+
+
+# --------------------------------------------------------------------------- #
+# 4b: wire names are zone-relative (the API appends the zone name)
+# --------------------------------------------------------------------------- #
+def test_create_sends_zone_relative_name():
+    """Regression: a full FQDN on the wire becomes <fqdn>.<zone> (doubled)."""
+    fake = FakeHetznerAPI()
+    manager = make_manager(fake)
+    change = manager.ensure_service_record("asr-small", "b03", apply=True)
+    assert change.status == STATUS_CREATED
+    creates = [r for r in fake.write_requests if r["path"].endswith("/rrsets")]
+    assert creates[0]["body"]["name"] == "asr-small.api"  # NOT "asr-small.api.mybister.com"
+    assert fake.cname_target("asr-small.api.mybister.com") == "b03.mybister.com."
+    assert fake.cname_target("asr-small.api.mybister.com.mybister.com") is None
+
+
+def test_update_uses_zone_relative_name_in_path():
+    fake = FakeHetznerAPI(
+        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com"}], "ttl": 300}]
+    )
+    manager = make_manager(fake)
+    change = manager.ensure_service_record("asr-small", "b02", apply=True)
+    assert change.status == STATUS_UPDATED
+    paths = [r["path"] for r in fake.write_requests if r["path"].endswith("/actions/set_records")]
+    assert paths, "update must go through set_records"
+    assert all("/rrsets/asr-small.api/CNAME/" in p for p in paths)
+    assert fake.cname_target("asr-small.api.mybister.com") == "b02.mybister.com."
+
+
+def test_reads_tolerate_relative_and_absolute_rrset_names():
+    fake = FakeHetznerAPI()
+    fake.add_rrset("asr-small.api", "CNAME", records=[{"value": "b03.mybister.com."}], ttl=60)
+    manager = make_manager(fake)
+    record = manager.get_service_record("asr-small")
+    assert record.exists is True
+    assert record.target == "b03.mybister.com."
 
 
 # --------------------------------------------------------------------------- #

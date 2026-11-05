@@ -35,7 +35,14 @@ from .errors import (
     ValidationError,
 )
 from .registry import ServiceRegistry
-from .validators import normalize_target_host, same_name, to_absolute, validate_service_id
+from .validators import (
+    absolute_in_zone,
+    normalize_target_host,
+    same_name,
+    to_absolute,
+    to_relative,
+    validate_service_id,
+)
 
 logger = logging.getLogger("tools.hetzner_dns.manager")
 
@@ -199,6 +206,16 @@ class HetznerDNSManager:
         self.registry.get(service_id)
         return f"{validate_service_id(service_id)}.{self.config.service_domain}"
 
+    def api_name(self, fqdn: str) -> str:
+        """Zone-relative form of *fqdn* as expected by the Hetzner API.
+
+        The API appends the zone name to every RR set name it receives,
+        so ``asr-small.api.mybister.com`` goes over the wire as
+        ``asr-small.api`` (zone ``mybister.com``). Sending the FQDN would
+        create the doubled record ``asr-small.api.mybister.com.mybister.com``.
+        """
+        return to_relative(fqdn, self.config.zone)
+
     def normalize_host(self, host: str) -> str:
         """Normalize a short host name or FQDN to a target inside the zone."""
         return normalize_target_host(
@@ -211,7 +228,9 @@ class HetznerDNSManager:
     def _index_by_name(self, rrsets: Sequence[Dict[str, object]]) -> Dict[str, Dict[str, Dict[str, object]]]:
         index: Dict[str, Dict[str, Dict[str, object]]] = {}
         for rrset in rrsets:
-            name = str(rrset.get("name", "")).lower()
+            # Tolerate both name forms on read: the API may return names
+            # relative to the zone or already fully qualified.
+            name = absolute_in_zone(str(rrset.get("name", "")), self.config.zone)
             rtype = str(rrset.get("type", "")).upper()
             index.setdefault(name, {})[rtype] = rrset
         return index
@@ -246,7 +265,7 @@ class HetznerDNSManager:
 
     def _record_from_index(self, service_id: str, index: Dict[str, Dict[str, Dict[str, object]]]) -> ServiceRecord:
         fqdn = self.fqdn(service_id)
-        by_type = index.get(fqdn.lower(), {})
+        by_type = index.get(absolute_in_zone(fqdn, self.config.zone), {})
         cname = by_type.get("CNAME")
         conflict_types = sorted(t for t in by_type if t != "CNAME")
         conflict_targets: List[str] = []
@@ -274,8 +293,11 @@ class HetznerDNSManager:
 
     def get_service_record(self, service_id: str) -> ServiceRecord:
         """Current state of a single service (``exists=False`` if not created yet)."""
-        fqdn = self.fqdn(service_id)  # validates the id
-        rrsets = self._client.list_rrsets(self.zone, name=fqdn)
+        self.fqdn(service_id)  # validates the id
+        # Fetch the whole (small) zone and match locally: no name goes over
+        # the wire on reads, so they stay correct regardless of how the API
+        # resolves name filters - names are zone-relative everywhere else.
+        rrsets = self._client.list_rrsets(self.zone)
         index = self._index_by_name(rrsets)
         return self._record_from_index(service_id, index)
 
@@ -450,10 +472,11 @@ class HetznerDNSManager:
         fqdn = plan.fqdn
         if plan.status == STATUS_CREATED:
             logger.info("%s: erstelle CNAME -> %s", fqdn, plan.target)
-            # The wire value must be absolute: "b03.mybister.com."
+            # The wire name must be zone-relative ("asr-small.api", see
+            # api_name()); the wire value must be absolute ("b03.mybister.com.").
             rrset = self._client.create_rrset(
                 zone,
-                fqdn,
+                self.api_name(fqdn),
                 "CNAME",
                 ttl=self.config.ttl,
                 records=[{"value": to_absolute(plan.target)}],
@@ -474,13 +497,13 @@ class HetznerDNSManager:
 
         if plan.status == STATUS_UPDATED:
             logger.info("%s: aktualisiere CNAME %s -> %s", fqdn, plan.current_target, plan.target)
-            # The wire value must be absolute: "b03.mybister.com."
+            # The wire name must be zone-relative; the wire value absolute.
             self._client.set_rrset_records(
-                zone, fqdn, "CNAME", records=[{"value": to_absolute(plan.target)}]
+                zone, self.api_name(fqdn), "CNAME", records=[{"value": to_absolute(plan.target)}]
             )
             ttl = current.ttl
             if self.config.ttl and ttl != self.config.ttl:
-                self._client.change_rrset_ttl(zone, fqdn, "CNAME", ttl=self.config.ttl)
+                self._client.change_rrset_ttl(zone, self.api_name(fqdn), "CNAME", ttl=self.config.ttl)
                 ttl = self.config.ttl
             return ChangeResult(
                 service_id=plan.service_id,

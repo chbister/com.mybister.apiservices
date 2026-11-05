@@ -75,6 +75,40 @@ def same_name(left: Optional[str], right: Optional[str]) -> bool:
     return bare(left) == bare(right)
 
 
+def to_relative(name: str, zone: str) -> str:
+    """Return the zone-relative form of *name* as expected by the Hetzner API.
+
+    The API appends the zone name to every RR set name it receives, so the
+    FQDN ``asr-small.api.mybister.com`` must be sent as ``asr-small.api``
+    for the zone ``mybister.com`` (``@`` is the zone apex). Sending the
+    full FQDN would create ``asr-small.api.mybister.com.mybister.com``.
+    """
+    bare = (name or "").strip().rstrip(".").lower()
+    z = (zone or "").strip().rstrip(".").lower()
+    if not bare:
+        return bare
+    if bare == z:
+        return "@"
+    if bare.endswith("." + z):
+        return bare[: -(len(z) + 1)]
+    return bare
+
+
+def absolute_in_zone(name: str, zone: str) -> str:
+    """Return *name* as FQDN inside *zone* (tolerates relative names).
+
+    Used to normalize names coming back from the API (which may be
+    relative or fully qualified) before comparing them.
+    """
+    bare = (name or "").strip().rstrip(".").lower()
+    z = (zone or "").strip().rstrip(".").lower()
+    if not bare or bare == "@":
+        return z
+    if bare == z or bare.endswith("." + z):
+        return bare
+    return f"{bare}.{z}"
+
+
 def normalize_target_host(host: str, *, zone: str, service_domain: str, what: str = "Zielhost") -> str:
     """Normalize a target host to an FQDN inside *zone*.
 
