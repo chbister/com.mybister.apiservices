@@ -33,12 +33,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.tts.rule=Host(`ask.mybister.com`) && PathPrefix(`/tts`)"
+      - "traefik.http.routers.tts.rule=Host(`tts.api.mybister.com`)"
       - "traefik.http.routers.tts.entrypoints=websecure"
       - "traefik.http.routers.tts.tls=true"
       - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.tts.middlewares=apikey-auth,tts-strip"
-      - "traefik.http.middlewares.tts-strip.stripprefix.prefixes=/tts"
+      - "traefik.http.routers.tts.middlewares=apikey-auth"
       - "traefik.http.services.tts.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -127,12 +126,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.asr-tiny.rule=Host(`ask.mybister.com`) && PathPrefix(`/asr-tiny`)"
+      - "traefik.http.routers.asr-tiny.rule=Host(`asr-tiny.api.mybister.com`)"
       - "traefik.http.routers.asr-tiny.entrypoints=websecure"
       - "traefik.http.routers.asr-tiny.tls=true"
       - "traefik.http.routers.asr-tiny.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.asr-tiny.middlewares=apikey-auth,asr-tiny-strip"
-      - "traefik.http.middlewares.asr-tiny-strip.stripprefix.prefixes=/asr-tiny"
+      - "traefik.http.routers.asr-tiny.middlewares=apikey-auth"
       - "traefik.http.services.asr-tiny.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -153,12 +151,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.asr-small.rule=Host(`ask.mybister.com`) && PathPrefix(`/asr-small`)"
+      - "traefik.http.routers.asr-small.rule=Host(`asr-small.api.mybister.com`)"
       - "traefik.http.routers.asr-small.entrypoints=websecure"
       - "traefik.http.routers.asr-small.tls=true"
       - "traefik.http.routers.asr-small.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.asr-small.middlewares=apikey-auth,asr-small-strip"
-      - "traefik.http.middlewares.asr-small-strip.stripprefix.prefixes=/asr-small"
+      - "traefik.http.routers.asr-small.middlewares=apikey-auth"
       - "traefik.http.services.asr-small.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -179,12 +176,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.asr-medium.rule=Host(`ask.mybister.com`) && PathPrefix(`/asr-medium`)"
+      - "traefik.http.routers.asr-medium.rule=Host(`asr-medium.api.mybister.com`)"
       - "traefik.http.routers.asr-medium.entrypoints=websecure"
       - "traefik.http.routers.asr-medium.tls=true"
       - "traefik.http.routers.asr-medium.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.asr-medium.middlewares=apikey-auth,asr-medium-strip"
-      - "traefik.http.middlewares.asr-medium-strip.stripprefix.prefixes=/asr-medium"
+      - "traefik.http.routers.asr-medium.middlewares=apikey-auth"
       - "traefik.http.services.asr-medium.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -205,12 +201,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.asr-large.rule=Host(`ask.mybister.com`) && PathPrefix(`/asr-large`)"
+      - "traefik.http.routers.asr-large.rule=Host(`asr-large.api.mybister.com`)"
       - "traefik.http.routers.asr-large.entrypoints=websecure"
       - "traefik.http.routers.asr-large.tls=true"
       - "traefik.http.routers.asr-large.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.asr-large.middlewares=apikey-auth,asr-large-strip"
-      - "traefik.http.middlewares.asr-large-strip.stripprefix.prefixes=/asr-large"
+      - "traefik.http.routers.asr-large.middlewares=apikey-auth"
       - "traefik.http.services.asr-large.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -375,12 +370,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.diarization.rule=Host(`ask.mybister.com`) && PathPrefix(`/diarization`)"
+      - "traefik.http.routers.diarization.rule=Host(`diarization.api.mybister.com`)"
       - "traefik.http.routers.diarization.entrypoints=websecure"
       - "traefik.http.routers.diarization.tls=true"
       - "traefik.http.routers.diarization.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.diarization.middlewares=apikey-auth,diarization-strip"
-      - "traefik.http.middlewares.diarization-strip.stripprefix.prefixes=/diarization"
+      - "traefik.http.routers.diarization.middlewares=apikey-auth"
       - "traefik.http.services.diarization.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -445,12 +439,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.convert.rule=Host(`ask.mybister.com`) && PathPrefix(`/convert`)"
+      - "traefik.http.routers.convert.rule=Host(`convert.api.mybister.com`)"
       - "traefik.http.routers.convert.entrypoints=websecure"
       - "traefik.http.routers.convert.tls=true"
       - "traefik.http.routers.convert.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.convert.middlewares=apikey-auth,convert-strip"
-      - "traefik.http.middlewares.convert-strip.stripprefix.prefixes=/convert"
+      - "traefik.http.routers.convert.middlewares=apikey-auth"
       - "traefik.http.services.convert.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -516,7 +509,7 @@ services:
   #     - food-recognition
   #     - metadata
   #     - ner
-  #     - processor
+  #     - debug-processor
   #     - qrcode
   #     - sentiment
   #     - statusbar
@@ -528,12 +521,12 @@ services:
   #     - "traefik.enable=true"
   #     - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
   #     # Router (HTTPS)
-  #     - "traefik.http.routers.main.rule=Host(`ask.mybister.com`)"
+  #     - "traefik.http.routers.main.rule=Host(`api.mybister.com`)"
   #     - "traefik.http.routers.main.entrypoints=websecure"
   #     - "traefik.http.routers.main.tls=true"
   #     - "traefik.http.routers.main.tls.certresolver=letsencrypt"
   #     # optional: HTTP → HTTPS redirect
-  #     - "traefik.http.routers.main-http.rule=Host(`ask.mybister.com`)"
+  #     - "traefik.http.routers.main-http.rule=Host(`api.mybister.com`)"
   #     - "traefik.http.routers.main-http.entrypoints=web"
   #     - "traefik.http.routers.main-http.middlewares=redirect-to-https"
   #     # Middleware für Redirect
@@ -566,7 +559,7 @@ services:
   #     - food-recognition-dev
   #     - metadata-dev
   #     - ner-dev
-  #     - processor-dev
+  #     - debug-processor-dev
   #     - qrcode-dev
   #     - sentiment-dev
   #     - statusbar-dev
@@ -580,12 +573,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.barcode.rule=Host(`ask.mybister.com`) && PathPrefix(`/barcode`)"
+      - "traefik.http.routers.barcode.rule=Host(`barcode.api.mybister.com`)"
       - "traefik.http.routers.barcode.entrypoints=websecure"
       - "traefik.http.routers.barcode.tls=true"
       - "traefik.http.routers.barcode.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.barcode.middlewares=apikey-auth,barcode-strip"
-      - "traefik.http.middlewares.barcode-strip.stripprefix.prefixes=/barcode"
+      - "traefik.http.routers.barcode.middlewares=apikey-auth"
       - "traefik.http.services.barcode.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -636,12 +628,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.qrcode.rule=Host(`ask.mybister.com`) && PathPrefix(`/qrcode`)"
+      - "traefik.http.routers.qrcode.rule=Host(`qrcode.api.mybister.com`)"
       - "traefik.http.routers.qrcode.entrypoints=websecure"
       - "traefik.http.routers.qrcode.tls=true"
       - "traefik.http.routers.qrcode.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.qrcode.middlewares=apikey-auth,qrcode-strip"
-      - "traefik.http.middlewares.qrcode-strip.stripprefix.prefixes=/qrcode"
+      - "traefik.http.routers.qrcode.middlewares=apikey-auth"
       - "traefik.http.services.qrcode.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -692,12 +683,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.sentiment.rule=Host(`ask.mybister.com`) && PathPrefix(`/sentiment`)"
+      - "traefik.http.routers.sentiment.rule=Host(`sentiment.api.mybister.com`)"
       - "traefik.http.routers.sentiment.entrypoints=websecure"
       - "traefik.http.routers.sentiment.tls=true"
       - "traefik.http.routers.sentiment.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.sentiment.middlewares=apikey-auth,sentiment-strip"
-      - "traefik.http.middlewares.sentiment-strip.stripprefix.prefixes=/sentiment"
+      - "traefik.http.routers.sentiment.middlewares=apikey-auth"
       - "traefik.http.services.sentiment.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -755,12 +745,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.ner.rule=Host(`ask.mybister.com`) && PathPrefix(`/ner`)"
+      - "traefik.http.routers.ner.rule=Host(`ner.api.mybister.com`)"
       - "traefik.http.routers.ner.entrypoints=websecure"
       - "traefik.http.routers.ner.tls=true"
       - "traefik.http.routers.ner.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ner.middlewares=apikey-auth,ner-strip"
-      - "traefik.http.middlewares.ner-strip.stripprefix.prefixes=/ner"
+      - "traefik.http.routers.ner.middlewares=apikey-auth"
       - "traefik.http.services.ner.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -818,12 +807,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.extraction.rule=Host(`ask.vereinstalk.de`) && PathPrefix(`/extraction`)"
+      - "traefik.http.routers.extraction.rule=Host(`extraction.api.mybister.com`)"
       - "traefik.http.routers.extraction.entrypoints=websecure"
       - "traefik.http.routers.extraction.tls=true"
       - "traefik.http.routers.extraction.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.extraction.middlewares=apikey-auth,extraction-strip"
-      - "traefik.http.middlewares.extraction-strip.stripprefix.prefixes=/extraction"
+      - "traefik.http.routers.extraction.middlewares=apikey-auth"
       - "traefik.http.services.extraction.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -881,12 +869,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.resume.rule=Host(`ask.mybister.com`) && PathPrefix(`/resume`)"
+      - "traefik.http.routers.resume.rule=Host(`resume.api.mybister.com`)"
       - "traefik.http.routers.resume.entrypoints=websecure"
       - "traefik.http.routers.resume.tls=true"
       - "traefik.http.routers.resume.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.resume.middlewares=apikey-auth,resume-strip"
-      - "traefik.http.middlewares.resume-strip.stripprefix.prefixes=/resume"
+      - "traefik.http.routers.resume.middlewares=apikey-auth"
       - "traefik.http.services.resume.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -946,12 +933,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.ocr.rule=Host(`ask.vereinstalk.de`) && PathPrefix(`/ocr`)"
+      - "traefik.http.routers.ocr.rule=Host(`ocr.api.mybister.com`)"
       - "traefik.http.routers.ocr.entrypoints=websecure"
       - "traefik.http.routers.ocr.tls=true"
       - "traefik.http.routers.ocr.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.ocr.middlewares=apikey-auth,ocr-strip"
-      - "traefik.http.middlewares.ocr-strip.stripprefix.prefixes=/ocr"
+      - "traefik.http.routers.ocr.middlewares=apikey-auth"
       - "traefik.http.services.ocr.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -1069,12 +1055,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.emotion.rule=Host(`ask.mybister.com`) && PathPrefix(`/emotion`)"
+      - "traefik.http.routers.emotion.rule=Host(`emotion.api.mybister.com`)"
       - "traefik.http.routers.emotion.entrypoints=websecure"
       - "traefik.http.routers.emotion.tls=true"
       - "traefik.http.routers.emotion.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.emotion.middlewares=apikey-auth,emotion-strip"
-      - "traefik.http.middlewares.emotion-strip.stripprefix.prefixes=/emotion"
+      - "traefik.http.routers.emotion.middlewares=apikey-auth"
       - "traefik.http.services.emotion.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -1131,12 +1116,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.emotion-nuance.rule=Host(`ask.mybister.com`) && PathPrefix(`/emotion-nuance`)"
+      - "traefik.http.routers.emotion-nuance.rule=Host(`emotion-nuance.api.mybister.com`)"
       - "traefik.http.routers.emotion-nuance.entrypoints=websecure"
       - "traefik.http.routers.emotion-nuance.tls=true"
       - "traefik.http.routers.emotion-nuance.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.emotion-nuance.middlewares=apikey-auth,emotion-nuance-strip"
-      - "traefik.http.middlewares.emotion-nuance-strip.stripprefix.prefixes=/emotion-nuance"
+      - "traefik.http.routers.emotion-nuance.middlewares=apikey-auth"
       - "traefik.http.services.emotion-nuance.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -1158,12 +1142,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.emotion-vibe.rule=Host(`ask.mybister.com`) && PathPrefix(`/emotion-vibe`)"
+      - "traefik.http.routers.emotion-vibe.rule=Host(`emotion-vibe.api.mybister.com`)"
       - "traefik.http.routers.emotion-vibe.entrypoints=websecure"
       - "traefik.http.routers.emotion-vibe.tls=true"
       - "traefik.http.routers.emotion-vibe.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.emotion-vibe.middlewares=apikey-auth,emotion-vibe-strip"
-      - "traefik.http.middlewares.emotion-vibe-strip.stripprefix.prefixes=/emotion-vibe"
+      - "traefik.http.routers.emotion-vibe.middlewares=apikey-auth"
       - "traefik.http.services.emotion-vibe.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -1185,12 +1168,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.emotion-state.rule=Host(`ask.mybister.com`) && PathPrefix(`/emotion-state`)"
+      - "traefik.http.routers.emotion-state.rule=Host(`emotion-state.api.mybister.com`)"
       - "traefik.http.routers.emotion-state.entrypoints=websecure"
       - "traefik.http.routers.emotion-state.tls=true"
       - "traefik.http.routers.emotion-state.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.emotion-state.middlewares=apikey-auth,emotion-state-strip"
-      - "traefik.http.middlewares.emotion-state-strip.stripprefix.prefixes=/emotion-state"
+      - "traefik.http.routers.emotion-state.middlewares=apikey-auth"
       - "traefik.http.services.emotion-state.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -1299,12 +1281,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.emotion-hate.rule=Host(`ask.mybister.com`) && PathPrefix(`/emotion-hate`)"
+      - "traefik.http.routers.emotion-hate.rule=Host(`emotion-hate.api.mybister.com`)"
       - "traefik.http.routers.emotion-hate.entrypoints=websecure"
       - "traefik.http.routers.emotion-hate.tls=true"
       - "traefik.http.routers.emotion-hate.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.emotion-hate.middlewares=apikey-auth,emotion-hate-strip"
-      - "traefik.http.middlewares.emotion-hate-strip.stripprefix.prefixes=/emotion-hate"
+      - "traefik.http.routers.emotion-hate.middlewares=apikey-auth"
       - "traefik.http.services.emotion-hate.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -1349,47 +1330,55 @@ services:
         aliases:
           - emotion-hate-link
 
-  processor:
-    image: ghcr.io/chbister/processor:latest
+  debug-processor:
+    image: ghcr.io/chbister/debug-processor:latest
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.processor.rule=Host(`ask.mybister.com`) && PathPrefix(`/processor`)"
-      - "traefik.http.routers.processor.entrypoints=websecure"
-      - "traefik.http.routers.processor.tls=true"
-      - "traefik.http.routers.processor.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.processor.middlewares=apikey-auth,processor-strip"
-      - "traefik.http.middlewares.processor-strip.stripprefix.prefixes=/processor"
-      - "traefik.http.services.processor.loadbalancer.server.port=8000"
+      - "traefik.http.routers.debug-processor.rule=Host(`debug-processor.api.mybister.com`)"
+      - "traefik.http.routers.debug-processor.entrypoints=websecure"
+      - "traefik.http.routers.debug-processor.tls=true"
+      - "traefik.http.routers.debug-processor.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.debug-processor.middlewares=apikey-auth"
+      - "traefik.http.services.debug-processor.loadbalancer.server.port=8000"
     expose:
       - "8000"
+    environment:
+      # Interne Transportadressen (Docker-DNS, unveraenderte Verarbeitungskette).
+      # Fuer einen Umzug auf die HTTPS-Endpunkte hier die Werte tauschen (Audit R1).
+      SENTIMENT_URL: "http://sentiment:8000/v1/sentiment"
+      EMOTION_BASE_URL: "http://emotion:8000/v1/emotion"
+      EMOTION_NUANCE_URL: "http://emotion-nuance:8000/v1/emotion"
+      EMOTION_VIBE_URL: "http://emotion-vibe:8000/v1/emotion"
+      EMOTION_STATE_URL: "http://emotion-state:8000/v1/emotion"
+      NER_URL: "http://ner:8000/v1/ner"
     profiles: [ "prod" ]
     networks:
       edge:
       app:
         aliases:
-          - processor-link
+          - debug-processor-link
 
-  processor-image-builder:
+  debug-processor-image-builder:
     build:
       context: ./processor-service
-    image: ghcr.io/chbister/processor:latest
+    image: ghcr.io/chbister/debug-processor:latest
     profiles: [ "build" ]
-    entrypoint: ["echo", "Service processor-image-builder is only for building the image"]
+    entrypoint: ["echo", "Service debug-processor-image-builder is only for building the image"]
     restart: "no"
 
-  processor-dev:
+  debug-processor-dev:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.processor-dev.rule=PathPrefix(`/processor`)"
-      - "traefik.http.routers.processor-dev.entrypoints=web"
-      - "traefik.http.routers.processor-dev.middlewares=processor-strip"
-      - "traefik.http.middlewares.processor-strip.stripprefix.prefixes=/processor"
-      - "traefik.http.services.processor-dev.loadbalancer.server.port=8000"
+      - "traefik.http.routers.debug-processor-dev.rule=PathPrefix(`/debug-processor`)"
+      - "traefik.http.routers.debug-processor-dev.entrypoints=web"
+      - "traefik.http.routers.debug-processor-dev.middlewares=debug-processor-strip"
+      - "traefik.http.middlewares.debug-processor-strip.stripprefix.prefixes=/debug-processor"
+      - "traefik.http.services.debug-processor-dev.loadbalancer.server.port=8000"
     build:
       context: ./processor-service
-    image: processor:local
+    image: debug-processor:local
     expose:
       - "8000"
     volumes:
@@ -1402,19 +1391,18 @@ services:
       edge:
       app:
         aliases:
-          - processor-link
+          - debug-processor-link
 
   callback-tester:
     image: ghcr.io/chbister/callback-tester:latest
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.callback-tester.rule=Host(`ask.mybister.com`) && PathPrefix(`/callback-tester`)"
+      - "traefik.http.routers.callback-tester.rule=Host(`callback-tester.api.mybister.com`)"
       - "traefik.http.routers.callback-tester.entrypoints=websecure"
       - "traefik.http.routers.callback-tester.tls=true"
       - "traefik.http.routers.callback-tester.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.callback-tester.middlewares=apikey-auth,callback-tester-strip"
-      - "traefik.http.middlewares.callback-tester-strip.stripprefix.prefixes=/callback-tester"
+      - "traefik.http.routers.callback-tester.middlewares=apikey-auth"
       - "traefik.http.services.callback-tester.loadbalancer.server.port=8000"
     expose:
       - "8000"
@@ -1467,12 +1455,11 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.metadata.rule=Host(`ask.mybister.com`) && PathPrefix(`/metadata`)"
+      - "traefik.http.routers.metadata.rule=Host(`metadata.api.mybister.com`)"
       - "traefik.http.routers.metadata.entrypoints=websecure"
       - "traefik.http.routers.metadata.tls=true"
       - "traefik.http.routers.metadata.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.metadata.middlewares=apikey-auth,metadata-strip"
-      - "traefik.http.middlewares.metadata-strip.stripprefix.prefixes=/metadata"
+      - "traefik.http.routers.metadata.middlewares=apikey-auth"
       - "traefik.http.services.metadata.loadbalancer.server.port=8000"
     environment:
       <<: *common-env

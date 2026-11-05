@@ -4,14 +4,14 @@ This project provides a robust, containerized suite of AI microservices covering
 
 ## 🚀 Architecture Overview
 
-The system is designed with a **Traefik-based routing** pattern. All external traffic flows through Traefik, which routes requests to internal services based on the PathPrefix.
+The system is designed with a **Traefik-based routing** pattern. All external traffic flows through Traefik, which routes requests to internal services based on the dedicated service hostname.
 
 ### Key Components:
-1.  **Traefik**: Central entry point and reverse proxy. Handles routing and middlewares like `StripPrefix` and `ForwardAuth`.
+1.  **Traefik**: Central entry point and reverse proxy. Handles TLS (Let's Encrypt), hostname-based routing and the `ForwardAuth` middleware; the development instance additionally does path-based routing with `StripPrefix`.
 2.  **ASR Services**: Multiple instances of Faster-Whisper (Tiny to Large-v3) supporting both synchronous and asynchronous (Pull/Push) processing, plus a local Apple-GPU endpoint (`/v1/asr/gpu`, mlx-whisper).
 3.  **Diarization Service**: Speaker detection (`speaker-check`) and full speaker timelines (`diarize`) via pyannote.
 4.  **Analysis Services**: Multilingual Sentiment and Emotion detection (base, Nuance, Vibe, State, and Hate variants).
-5.  **Processor Service**: An aggregator that orchestrates calls between ASR and Analysis services (`/v1/process`) and merges ASR + diarization into speaker protocols (`/v1/transcript`).
+5.  **Debug Processor Service**: An aggregator that orchestrates calls between ASR and Analysis services (`/v1/process`) and merges ASR + diarization into speaker protocols (`/v1/transcript`).
 6.  **Speech Services**: Text-to-Speech (XTTS v2 with voice cloning) and audio conversion (`convert`, ffmpeg in-container).
 7.  **Document Services** (CareerGraph profile): OCR (async, with dedicated worker), Resume parsing, Text/URL extraction, NER.
 8.  **Recognition Services**: Barcode/QR detection from images, QR code generation, food recognition (zero-shot).
@@ -22,18 +22,21 @@ The system is designed with a **Traefik-based routing** pattern. All external tr
 
 ### 1. Entry Point (Traefik)
 Acts as the reverse proxy.
-- **Production**: Uses a central Traefik instance.
-- **Development**: Uses a project-specific Traefik instance on port 80.
-- **URL Pattern**: `{{baseUrl}}/service-name/v1/...`
+- **Production**: Uses a central Traefik instance. Every service has its own hostname and TLS certificate:
+  `https://<service-id>.api.mybister.com` – the paths below are relative to that hostname
+  (e.g. `https://sentiment.api.mybister.com/v1/sentiment`).
+- **Development**: Uses a project-specific Traefik instance on port 80 with path-based routing:
+  `http://localhost/<service-id>/v1/...`
+- **Auth**: All production routers are protected by the `ForwardAuth` middleware (`API_KEY` header).
 
 ### 2. ASR (Speech-to-Text)
 Supports `tiny`, `small`, `medium`, and `large-v3` models.
-- **Endpoint**: `POST /asr-<model>/v1/asr`
+- **Endpoint**: `POST https://asr-<model>.api.mybister.com/v1/asr`
 - **Features**: 
     - `file_url` parameter for remote downloads.
     - **Async Mode**: Automatically switches to background processing for files > 5 minutes.
     - **Push Method**: Optional `callback_url` for webhooks. Supports `CALLBACK_AUTH_SECRET` for Bearer token authentication.
-- **Status/Download**: `GET /asr-<model>/v1/asr/status/{job_id}` and `GET /asr-<model>/v1/asr/download/{job_id}`.
+- **Status/Download**: `GET https://asr-<model>.api.mybister.com/v1/asr/status/{job_id}` and `GET https://asr-<model>.api.mybister.com/v1/asr/download/{job_id}`.
 - **GPU Endpoint (lokal)**: `POST /asr-<model>/v1/asr/gpu` – same contract, but transcribes with
   [mlx-whisper](https://github.com/ml-explore/mlx-whisper) on the Apple GPU (ctranslate2 is CPU-only
   on macOS). Supports `model_size` (`tiny|small|medium|large-v3` or a full HF repo) and
@@ -41,16 +44,17 @@ Supports `tiny`, `small`, `medium`, and `large-v3` models.
   `make local-asr` (see "Local GPU runs" below).
 
 ### 2b. Diarization (Speaker)
-- **Speaker check**: `POST /diarization/v1/speaker-check` – returns only `multi_speaker` + `number_speakers`.
-- **Full timeline**: `POST /diarization/v1/diarize` – returns the complete speaker timeline:
+- **Speaker check**: `POST https://diarization.api.mybister.com/v1/speaker-check` – returns only `multi_speaker` + `number_speakers`.
+- **Full timeline**: `POST https://diarization.api.mybister.com/v1/diarize` – returns the complete speaker timeline:
   `{"speakers": [{"start": 72.1, "end": 76.4, "speaker": "SPEAKER_00"}, ...],
   "number_speakers": 2, "multi_speaker": true, "metadata": {...}}`
-- **Status/Download**: `GET /diarization/v1/diarize/status/{job_id}` and `.../download/{job_id}`
+- **Status/Download**: `GET https://diarization.api.mybister.com/v1/diarize/status/{job_id}` and
+  `GET https://diarization.api.mybister.com/v1/diarize/download/{job_id}`
   (same job storage as `speaker-check`).
 - Audio decoding works without host ffmpeg (soundfile → PyAV → pydub fallback chain).
 
 ### 2c. Convert (ffmpeg, container-only)
-- **Endpoint**: `POST /convert/v1/convert` – converts audio and returns it as a binary response.
+- **Endpoint**: `POST https://convert.api.mybister.com/v1/convert` – converts audio and returns it as a binary response.
 - **Params**: `file` | `file_url`, `format` (`wav|mp3|flac|ogg|m4a`, default `wav`),
   `sample_rate` (default `16000`), `mono` (default `true`).
 - **Response headers**: `X-Original-Name`, `X-Duration-Seconds`, `X-Sample-Rate`, `X-Channels`.
@@ -58,18 +62,18 @@ Supports `tiny`, `small`, `medium`, and `large-v3` models.
 
 ### 3. Analysis Services (Multilingual)
 All emotion services share the same code base; the model is selected via `EMOTION_MODEL_ID`.
-- **Sentiment**: `POST /sentiment/v1/sentiment` – multilingual sentiment scoring.
-- **Emotion (base)**: `POST /emotion/v1/emotion` – 6 basic emotions (DistilBERT default).
-- **Emotion (Nuance)**: `POST /emotion-nuance/v1/emotion` – 28 fine-grained emotions.
-- **Emotion (State)**: `POST /emotion-state/v1/emotion` – 7 core psychological states.
-- **Emotion (Vibe)**: `POST /emotion-vibe/v1/emotion` – 1-5 star rating.
-- **Emotion (Hate)**: `POST /emotion-hate/v1/emotion` – hate-speech classifier (`cardiffnlp/twitter-roberta-base-hate`).
+- **Sentiment**: `POST https://sentiment.api.mybister.com/v1/sentiment` – multilingual sentiment scoring.
+- **Emotion (base)**: `POST https://emotion.api.mybister.com/v1/emotion` – 6 basic emotions (DistilBERT default).
+- **Emotion (Nuance)**: `POST https://emotion-nuance.api.mybister.com/v1/emotion` – 28 fine-grained emotions.
+- **Emotion (State)**: `POST https://emotion-state.api.mybister.com/v1/emotion` – 7 core psychological states.
+- **Emotion (Vibe)**: `POST https://emotion-vibe.api.mybister.com/v1/emotion` – 1-5 star rating.
+- **Emotion (Hate)**: `POST https://emotion-hate.api.mybister.com/v1/emotion` – hate-speech classifier (`cardiffnlp/twitter-roberta-base-hate`).
 
-### 4. Processor (The Aggregator)
+### 4. Debug Processor (The Aggregator)
 Combines ASR results with all analysis services.
-- **Endpoint**: `POST /processor/v1/process`
+- **Endpoint**: `POST https://debug-processor.api.mybister.com/v1/process`
 - **Logic**: It accepts an ASR JSON, processes segments in parallel, and returns a fully enriched "Voice Diary" object.
-- **Transcript endpoint**: `POST /processor/v1/transcript` – merges ASR segments with the
+- **Transcript endpoint**: `POST https://debug-processor.api.mybister.com/v1/transcript` – merges ASR segments with the
   diarization timeline into a speaker protocol:
   - Input: `asr_result` (answer of `/v1/asr`) + `diarization` (answer of `/v1/diarize`), or flat
     `segments` + `turns`; optional `speaker_names` (`{"SPEAKER_00": "Anna"}`) and
@@ -83,34 +87,34 @@ Combines ASR results with all analysis services.
   - Step-by-step guide (German): [docs/transkription-anleitung.md](docs/transkription-anleitung.md).
 
 ### 5. TTS (Text-to-Speech)
-- **Endpoint**: `POST /tts/v1/tts`
+- **Endpoint**: `POST https://tts.api.mybister.com/v1/tts`
 - **Models**: Coqui **XTTS v2** (multilingual, voice cloning) with GPU detection;
   automatic CPU fallback to German Tacotron2 (`tts_models/de/thorsten/tacotron2-DDS_German`).
 - Configurable voices via `TTS_DEFAULT_VOICE` / `TTS_DEFAULT_MALE_VOICE`, model root via `TTS_MODEL_ROOT`.
 
 ### 6. OCR (CareerGraph profile)
 Async document OCR with a dedicated worker container (`ocr-worker`).
-- **Endpoint**: `POST /ocr/v1/ocr` (UploadFile or `file_url`) – returns a job immediately for larger documents.
-- **Status/Download**: `GET /ocr/v1/ocr/status/{job_id}` and `GET /ocr/v1/ocr/download/{job_id}`.
-- Deployed in the `careergraph` profile (`make up-careergraph-prod|dev`), production host `ask.vereinstalk.de`.
+- **Endpoint**: `POST https://ocr.api.mybister.com/v1/ocr` (UploadFile or `file_url`) – returns a job immediately for larger documents.
+- **Status/Download**: `GET https://ocr.api.mybister.com/v1/ocr/status/{job_id}` and `GET https://ocr.api.mybister.com/v1/ocr/download/{job_id}`.
+- Deployed in the `careergraph` profile (`make up-careergraph-prod|dev`), production host `ocr.api.mybister.com`.
 
 ### 7. Extraction & NER
-- **Extraction**: `POST /extraction/v1/extract` – extracts structured data (names, phone numbers, …) from text/lines via pluggable extractor strategies (`mode`). Production host `ask.vereinstalk.de`.
-- **NER**: `POST /ner/v1/ner` – named entity recognition, async with
-  `GET /ner/v1/ner/status/{job_id}` and `.../download/{job_id}`.
+- **Extraction**: `POST https://extraction.api.mybister.com/v1/extract` – extracts structured data (names, phone numbers, …) from text/lines via pluggable extractor strategies (`mode`). Production host `extraction.api.mybister.com`.
+- **NER**: `POST https://ner.api.mybister.com/v1/ner` – named entity recognition, async with
+  `GET https://ner.api.mybister.com/v1/ner/status/{job_id}` and `GET https://ner.api.mybister.com/v1/ner/download/{job_id}`.
 
 ### 8. Resume Parsing (CareerGraph profile)
-- **Endpoint**: `POST /resume/v1/resume/extract` – parses CVs (stations, dates, contact data) with an optional NER model (`NER_ENABLED`/`NER_MODEL_ID`).
+- **Endpoint**: `POST https://resume.api.mybister.com/v1/resume/extract` – parses CVs (stations, dates, contact data) with an optional NER model (`NER_ENABLED`/`NER_MODEL_ID`).
 - Part of the `careergraph` profile alongside `ocr`/`ocr-worker`.
 
 ### 9. Metadata
-- **Endpoint**: `POST /metadata/metadata` (Traefik strips the `/metadata` prefix, the app route itself is `/metadata`, hence the doubled path) – generates/returns metadata for media files, async with `GET /metadata/metadata/status/{job_id}` and `GET /metadata/metadata/download/{job_id}`.
+- **Endpoint**: `POST https://metadata.api.mybister.com/metadata` – generates/returns metadata for media files, async with `GET https://metadata.api.mybister.com/metadata/status/{job_id}` and `GET https://metadata.api.mybister.com/metadata/download/{job_id}`.
 - Config: `MAX_DOWNLOAD_BYTES`, `DOWNLOAD_TIMEOUT_S`.
 
 ### 10. Barcode & QR
-- **Barcode detection**: `POST /barcode/v1/barcode` (image upload or URL).
-- **Highlight**: `POST /barcode/v1/barcode/highlight` (returns image with high-contrast borders).
-- **QR generation**: `GET /qrcode/v1/qrcode?data=...` – renders a QR code as image stream (generation, not detection).
+- **Barcode detection**: `POST https://barcode.api.mybister.com/v1/barcode` (image upload or URL).
+- **Highlight**: `POST https://barcode.api.mybister.com/v1/barcode/highlight` (returns image with high-contrast borders).
+- **QR generation**: `GET https://qrcode.api.mybister.com/v1/qrcode?data=...` – renders a QR code as image stream (generation, not detection).
 
 ### 11. Food Recognition *(code ready, not yet in compose)*
 - **Endpoint**: `POST /food-recognition/v1/detect` – zero-shot food item detection (GoutWatcher component list).
@@ -122,11 +126,12 @@ Async document OCR with a dedicated worker container (`ocr-worker`).
 
 ### 13. Callback Tester
 Simulates a webhook receiver for testing asynchronous ASR callbacks.
-- **Endpoint**: `POST /callback-tester/listen`
+- **Endpoint**: `POST https://callback-tester.api.mybister.com/listen`
+  (test helper – excluded from the DNS registry, so the CNAME has to be created manually if needed)
 - **Features**: 
     - Captures any incoming POST request.
     - Stores the payload and headers as JSON files.
-- **List Received**: `GET /callback-tester/list`
+- **List Received**: `GET https://callback-tester.api.mybister.com/list`
 
 ---
 
@@ -137,7 +142,7 @@ Simulates a webhook receiver for testing asynchronous ASR callbacks.
     - `dev`: Live-reloading enabled, debug logging, local code mounting for rapid development.
 2.  **Internal Networking**: Services communicate over a shared `edge` network (for Traefik) and a private `app` network using DNS aliases (e.g., `asr-tiny-link`).
 3.  **Resource Sharing**: All ASR and Analysis services share a common Hugging Face cache (`hf_cache`) and CTranslate2 cache (`ct2_cache`) to prevent redundant model downloads.
-4.  **Async Orchestration**: ASR services use a `ProcessPoolExecutor` to handle heavy CPU tasks without blocking the web workers, while the `processor` uses `asyncio` to call multiple analysis models simultaneously.
+4.  **Async Orchestration**: ASR services use a `ProcessPoolExecutor` to handle heavy CPU tasks without blocking the web workers, while the `debug-processor` uses `asyncio` to call multiple analysis models simultaneously.
 
 ---
 
@@ -174,6 +179,32 @@ Each service has a `/health` endpoint that returns the **hostname/container ID**
 
 ---
 
+## 🔗 DNS Management (Hetzner CNAMEs)
+
+Every independently deployable service gets a CNAME
+`<service-id>.api.mybister.com → <host>.mybister.com.` in the Hetzner Cloud
+DNS zone `mybister.com` (CNAME values are written absolute, i.e. with a
+trailing dot; existing records missing that dot are reported as diverging
+and normalized with `--force`). The repo ships a small CLI/library for that:
+
+```bash
+export HETZNER_API_TOKEN="..."            # Hetzner Cloud API token (Read & Write)
+
+python -m tools.hetzner_dns list                    # show current CNAMEs
+python -m tools.hetzner_dns bulk --host b03         # dry-run: plan all services
+python -m tools.hetzner_dns bulk --host b03 --apply # create missing CNAMEs
+python -m tools.hetzner_dns set asr-small b02 --apply
+python -m tools.hetzner_dns get asr-small
+```
+
+`set` and `bulk` are dry-runs by default; diverging CNAMEs are only
+overwritten in bulk with an explicit `--force`. The central service list
+lives in `tools/service_registry.json` and is reused by the tool.
+Full documentation (config, exit codes, JSON output, Python API,
+GitHub Actions): **[docs/hetzner-dns.md](docs/hetzner-dns.md)**.
+
+---
+
 ## 🍎 Local GPU Runs (no Docker)
 
 > **Step-by-step guide (German):** [docs/transkription-anleitung.md](docs/transkription-anleitung.md)
@@ -194,7 +225,7 @@ Models are downloaded lazily on first use (Whisper via mlx-community, pyannote 3
 ```bash
 make local-asr           # POST /v1/asr + /v1/asr/gpu        → http://127.0.0.1:8100
 make local-diarization   # POST /v1/speaker-check + /v1/diarize → http://127.0.0.1:8101
-make local-processor     # POST /v1/process + /v1/transcript   → http://127.0.0.1:8102
+make local-debug-processor     # POST /v1/process + /v1/transcript   → http://127.0.0.1:8102
 ```
 
 ### End-to-end example (audio → speaker protocol)

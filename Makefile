@@ -1,4 +1,4 @@
-.PHONY: help up-prod up-dev down-prod down-dev up-careergraph-prod up-careergraph-dev down-careergraph-prod down-careergraph-dev local-asr local-diarization local-processor
+.PHONY: help up-prod up-dev down-prod down-dev up-careergraph-prod up-careergraph-dev down-careergraph-prod down-careergraph-dev local-asr local-diarization local-debug-processor
 
 PROFILE ?= dev
 ACTION ?= up
@@ -16,7 +16,7 @@ help:
 	@echo "  up-careergraph-dev  - Start CareerGraph services (ocr-dev, ocr-worker-dev, resume-dev) for development"
 	@echo "  local-asr           - Run ASR service locally (GPU endpoint /v1/asr/gpu, port 8100)"
 	@echo "  local-diarization   - Run diarization service locally (/v1/diarize, port 8101)"
-	@echo "  local-processor     - Run processor service locally (/v1/transcript, port 8102)"
+	@echo "  local-debug-processor - Run debug-processor service locally (/v1/transcript, port 8102)"
 	@echo "  down-prod     - Stop services in production profile"
 	@echo "  down-dev      - Stop services in development profile"
 	@echo "  down-kickfriends-prod - Stop services in kickfriends production profile"
@@ -57,7 +57,7 @@ local-asr:
 local-diarization:
 	cd diarization-service && DIAR_JOBS_DIR=/tmp/diar-jobs HF_TOKEN="$$(grep '^HF_TOKEN=' ../.env | cut -d= -f2-)" ../.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8101
 
-local-processor:
+local-debug-processor:
 	cd processor-service && ../.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8102
 
 # Convenience targets

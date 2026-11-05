@@ -14,7 +14,7 @@ SERVICES = [
     "emotion-nuance",
     "emotion-vibe",
     "emotion-state",
-    "processor",
+    "debug-processor",
     "barcode",
     "callback-tester"
 ]
@@ -84,9 +84,9 @@ def test_barcode_scan():
     assert "results" in data
     assert data["count"] >= 0
 
-def test_processor_e2e():
-    """E2E test for processor service, which aggregates other services."""
-    url = f"{BASE_URL}/processor/v1/process"
+def test_debug_processor_e2e():
+    """E2E test for debug-processor service, which aggregates other services."""
+    url = f"{BASE_URL}/debug-processor/v1/process"
     payload = {
         "text": "Hello world. I am happy.",
         "language": "en",

@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "description": "Zentrale, deklarative Liste der eigenstaendig deploybaren API-Services. Basis fuer das Hetzner-DNS-Tool (tools.hetzner_dns) und spaeter fuer Deployment- und Ressourcenplanung. Enthaelt ausschliesslich Services mit eigenem oeffentlichem HTTP-Endpunkt (Traefik-Host-Regel in docker-compose.yml).",
+  "services": [
+    {
+      "id": "asr-tiny",
+      "description": "Speech-to-Text (Whisper tiny)",
+      "compose_service": "asr-tiny"
+    },
+    {
+      "id": "asr-small",
+      "description": "Speech-to-Text (Whisper small)",
+      "compose_service": "asr-small"
+    },
+    {
+      "id": "asr-medium",
+      "description": "Speech-to-Text (Whisper medium)",
+      "compose_service": "asr-medium"
+    },
+    {
+      "id": "asr-large",
+      "description": "Speech-to-Text (Whisper large-v3)",
+      "compose_service": "asr-large"
+    },
+    {
+      "id": "diarization",
+      "description": "Sprecher-Diarization",
+      "compose_service": "diarization"
+    },
+    {
+      "id": "sentiment",
+      "description": "Sentiment-Analyse",
+      "compose_service": "sentiment"
+    },
+    {
+      "id": "emotion",
+      "description": "Emotion-Erkennung (Standard-Modell)",
+      "compose_service": "emotion"
+    },
+    {
+      "id": "emotion-nuance",
+      "description": "Emotion-Erkennung (Nuance-Modell)",
+      "compose_service": "emotion-nuance"
+    },
+    {
+      "id": "emotion-state",
+      "description": "Emotion-Erkennung (State-Modell)",
+      "compose_service": "emotion-state"
+    },
+    {
+      "id": "emotion-vibe",
+      "description": "Emotion-Erkennung (Vibe-Modell)",
+      "compose_service": "emotion-vibe"
+    },
+    {
+      "id": "emotion-hate",
+      "description": "Emotion-/Hate-Speech-Erkennung",
+      "compose_service": "emotion-hate"
+    },
+    {
+      "id": "debug-processor",
+      "description": "Debug-Transkript-Processor / Aggregator",
+      "compose_service": "debug-processor"
+    },
+    {
+      "id": "tts",
+      "description": "Text-to-Speech",
+      "compose_service": "tts"
+    },
+    {
+      "id": "convert",
+      "description": "Audio-/Format-Konvertierung",
+      "compose_service": "convert"
+    },
+    {
+      "id": "ocr",
+      "description": "OCR (Texterkennung)",
+      "compose_service": "ocr"
+    },
+    {
+      "id": "extraction",
+      "description": "Text-Extraktion aus Dokumenten",
+      "compose_service": "extraction"
+    },
+    {
+      "id": "ner",
+      "description": "Named Entity Recognition",
+      "compose_service": "ner"
+    },
+    {
+      "id": "resume",
+      "description": "Lebenslauf-Parsing",
+      "compose_service": "resume"
+    },
+    {
+      "id": "metadata",
+      "description": "Metadaten-Extraktion",
+      "compose_service": "metadata"
+    },
+    {
+      "id": "barcode",
+      "description": "Barcode-Scanning (in prod skaliert auf 2 Replikate)",
+      "compose_service": "barcode"
+    },
+    {
+      "id": "qrcode",
+      "description": "QR-Code-Scanning",
+      "compose_service": "qrcode"
+    }
+  ],
+  "excluded": [
+    {
+      "id": "callback-tester",
+      "reason": "Webhook-Testempfenger - interne Hilfskomponente, kein produktiver Service"
+    },
+    {
+      "id": "ocr-worker",
+      "reason": "Worker ohne oeffentlichen HTTP-Endpunkt (kein Traefik-Router)"
+    },
+    {
+      "id": "apikey-auth",
+      "reason": "Traefik-ForwardAuth-Middleware (Infrastruktur)"
+    },
+    {
+      "id": "gateway",
+      "reason": "nginx-Gateway in docker-compose.yml auskommentiert"
+    },
+    {
+      "id": "food-recognition",
+      "reason": "Code vorhanden, aber nicht in docker-compose.yml deploybar"
+    },
+    {
+      "id": "statusbar",
+      "reason": "Code vorhanden, aber nicht in docker-compose.yml deploybar"
+    },
+    {
+      "id": "asr-vibevoice",
+      "reason": "asr-service-vibevoice nicht in docker-compose.yml dieses Repositories hinterlegt"
+    }
+  ]
+}

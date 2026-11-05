@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-APP_TITLE = "ASR Result Processor/Aggregator"
+APP_TITLE = "Debug ASR Result Processor/Aggregator"
 app = FastAPI(title=APP_TITLE)
 
 # Internal service URLs (using network aliases)
@@ -94,7 +94,7 @@ async def analyze_text(client: httpx.AsyncClient, text: str) -> Dict[str, Any]:
 def health():
     return {
         "status": "ok",
-        "service": "processor",
+        "service": "debug-processor",
         "hostname": socket.gethostname(),
         "datetime": datetime.utcnow().isoformat()
     }
