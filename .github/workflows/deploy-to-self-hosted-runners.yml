@@ -1,42 +1,28 @@
 name: Deploy to self-hosted runners
 
+run-name: Deploy to ${{ inputs.target }}
+
 on:
-  workflow_run:
-    workflows:
-      - Build and Push Docker Images
-    types:
-      - completed
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Runner on which the deployment runs"
+        type: choice
+        options:
+          - b01
+          - b02
+          - b03
+        required: true
+        default: b01
 
 jobs:
   deploy:
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
-
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - name: b01
-            runner: [self-hosted, production, b01, apiservices]
-            profile: kickfriends-prod
-
-          #- name: worker01
-          #  runner: [self-hosted, production, worker01, apiservices]
-          #  profile: worker01
-
-          #- name: frontend01
-          #  runner: [self-hosted, production, frontend01, apiservices]
-          #  profile: frontend01
-
-    runs-on: ${{ matrix.target.runner }}
+    name: Deploy (prod) to ${{ inputs.target }}
+    runs-on: [self-hosted, com-mybister-apiservices, "${{ inputs.target }}"]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Login to GHCR
         run: |
@@ -46,6 +32,6 @@ jobs:
 
       - name: Deploy profile
         run: |
-          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile "${{ matrix.target.profile }}" pull
-          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile "${{ matrix.target.profile }}" up -d
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile prod pull
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile prod up -d
           docker image prune -f
