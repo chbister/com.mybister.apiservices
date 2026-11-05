@@ -104,7 +104,8 @@ services:
   apikey-auth:
     image: ghcr.io/chbister/com.mybister.forwardauthservice:latest
     platform: linux/amd64
-    profiles: [ "prod", "kickfriends-prod", "careergraph-prod" ]
+    # "base": the minimal profile every host gets via the deploy workflow
+    profiles: [ "base", "prod", "kickfriends-prod", "careergraph-prod" ]
     environment:
       API_KEY: ${API_KEY}
     labels:

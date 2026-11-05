@@ -17,7 +17,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy (prod) to ${{ inputs.target }}
+    name: Start base (apikey-auth) on ${{ inputs.target }}
     runs-on: [self-hosted, com-mybister-apiservices, "${{ inputs.target }}"]
 
     steps:
@@ -30,8 +30,9 @@ jobs:
             -u "${{ github.actor }}" \
             --password-stdin
 
-      - name: Deploy profile
+      # Minimal base: only the ForwardAuth middleware every production router
+      # references. All other services are started manually on the host
+      # (docker compose --profile prod up -d <services>).
+      - name: Start base profile (apikey-auth)
         run: |
-          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile prod pull
-          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile prod up -d
-          docker image prune -f
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile base up -d
