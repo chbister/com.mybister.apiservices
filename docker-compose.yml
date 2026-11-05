@@ -516,7 +516,7 @@ services:
   #     - food-recognition
   #     - metadata
   #     - ner
-  #     - processor
+  #     - debug-processor
   #     - qrcode
   #     - sentiment
   #     - statusbar
@@ -566,7 +566,7 @@ services:
   #     - food-recognition-dev
   #     - metadata-dev
   #     - ner-dev
-  #     - processor-dev
+  #     - debug-processor-dev
   #     - qrcode-dev
   #     - sentiment-dev
   #     - statusbar-dev
@@ -1349,18 +1349,18 @@ services:
         aliases:
           - emotion-hate-link
 
-  processor:
-    image: ghcr.io/chbister/processor:latest
+  debug-processor:
+    image: ghcr.io/chbister/debug-processor:latest
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.processor.rule=Host(`ask.mybister.com`) && PathPrefix(`/processor`)"
-      - "traefik.http.routers.processor.entrypoints=websecure"
-      - "traefik.http.routers.processor.tls=true"
-      - "traefik.http.routers.processor.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.processor.middlewares=apikey-auth,processor-strip"
-      - "traefik.http.middlewares.processor-strip.stripprefix.prefixes=/processor"
-      - "traefik.http.services.processor.loadbalancer.server.port=8000"
+      - "traefik.http.routers.debug-processor.rule=Host(`ask.mybister.com`) && PathPrefix(`/debug-processor`)"
+      - "traefik.http.routers.debug-processor.entrypoints=websecure"
+      - "traefik.http.routers.debug-processor.tls=true"
+      - "traefik.http.routers.debug-processor.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.debug-processor.middlewares=apikey-auth,debug-processor-strip"
+      - "traefik.http.middlewares.debug-processor-strip.stripprefix.prefixes=/debug-processor"
+      - "traefik.http.services.debug-processor.loadbalancer.server.port=8000"
     expose:
       - "8000"
     profiles: [ "prod" ]
@@ -1368,28 +1368,28 @@ services:
       edge:
       app:
         aliases:
-          - processor-link
+          - debug-processor-link
 
-  processor-image-builder:
+  debug-processor-image-builder:
     build:
       context: ./processor-service
-    image: ghcr.io/chbister/processor:latest
+    image: ghcr.io/chbister/debug-processor:latest
     profiles: [ "build" ]
-    entrypoint: ["echo", "Service processor-image-builder is only for building the image"]
+    entrypoint: ["echo", "Service debug-processor-image-builder is only for building the image"]
     restart: "no"
 
-  processor-dev:
+  debug-processor-dev:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
-      - "traefik.http.routers.processor-dev.rule=PathPrefix(`/processor`)"
-      - "traefik.http.routers.processor-dev.entrypoints=web"
-      - "traefik.http.routers.processor-dev.middlewares=processor-strip"
-      - "traefik.http.middlewares.processor-strip.stripprefix.prefixes=/processor"
-      - "traefik.http.services.processor-dev.loadbalancer.server.port=8000"
+      - "traefik.http.routers.debug-processor-dev.rule=PathPrefix(`/debug-processor`)"
+      - "traefik.http.routers.debug-processor-dev.entrypoints=web"
+      - "traefik.http.routers.debug-processor-dev.middlewares=debug-processor-strip"
+      - "traefik.http.middlewares.debug-processor-strip.stripprefix.prefixes=/debug-processor"
+      - "traefik.http.services.debug-processor-dev.loadbalancer.server.port=8000"
     build:
       context: ./processor-service
-    image: processor:local
+    image: debug-processor:local
     expose:
       - "8000"
     volumes:
@@ -1402,7 +1402,7 @@ services:
       edge:
       app:
         aliases:
-          - processor-link
+          - debug-processor-link
 
   callback-tester:
     image: ghcr.io/chbister/callback-tester:latest

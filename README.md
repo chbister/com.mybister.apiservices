@@ -65,11 +65,11 @@ All emotion services share the same code base; the model is selected via `EMOTIO
 - **Emotion (Vibe)**: `POST /emotion-vibe/v1/emotion` – 1-5 star rating.
 - **Emotion (Hate)**: `POST /emotion-hate/v1/emotion` – hate-speech classifier (`cardiffnlp/twitter-roberta-base-hate`).
 
-### 4. Processor (The Aggregator)
+### 4. Debug Processor (The Aggregator)
 Combines ASR results with all analysis services.
-- **Endpoint**: `POST /processor/v1/process`
+- **Endpoint**: `POST /debug-processor/v1/process`
 - **Logic**: It accepts an ASR JSON, processes segments in parallel, and returns a fully enriched "Voice Diary" object.
-- **Transcript endpoint**: `POST /processor/v1/transcript` – merges ASR segments with the
+- **Transcript endpoint**: `POST /debug-processor/v1/transcript` – merges ASR segments with the
   diarization timeline into a speaker protocol:
   - Input: `asr_result` (answer of `/v1/asr`) + `diarization` (answer of `/v1/diarize`), or flat
     `segments` + `turns`; optional `speaker_names` (`{"SPEAKER_00": "Anna"}`) and
@@ -137,7 +137,7 @@ Simulates a webhook receiver for testing asynchronous ASR callbacks.
     - `dev`: Live-reloading enabled, debug logging, local code mounting for rapid development.
 2.  **Internal Networking**: Services communicate over a shared `edge` network (for Traefik) and a private `app` network using DNS aliases (e.g., `asr-tiny-link`).
 3.  **Resource Sharing**: All ASR and Analysis services share a common Hugging Face cache (`hf_cache`) and CTranslate2 cache (`ct2_cache`) to prevent redundant model downloads.
-4.  **Async Orchestration**: ASR services use a `ProcessPoolExecutor` to handle heavy CPU tasks without blocking the web workers, while the `processor` uses `asyncio` to call multiple analysis models simultaneously.
+4.  **Async Orchestration**: ASR services use a `ProcessPoolExecutor` to handle heavy CPU tasks without blocking the web workers, while the `debug-processor` uses `asyncio` to call multiple analysis models simultaneously.
 
 ---
 
@@ -220,7 +220,7 @@ Models are downloaded lazily on first use (Whisper via mlx-community, pyannote 3
 ```bash
 make local-asr           # POST /v1/asr + /v1/asr/gpu        → http://127.0.0.1:8100
 make local-diarization   # POST /v1/speaker-check + /v1/diarize → http://127.0.0.1:8101
-make local-processor     # POST /v1/process + /v1/transcript   → http://127.0.0.1:8102
+make local-debug-processor     # POST /v1/process + /v1/transcript   → http://127.0.0.1:8102
 ```
 
 ### End-to-end example (audio → speaker protocol)

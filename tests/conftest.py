@@ -19,7 +19,7 @@ SERVICES = [
     "emotion-nuance",
     "emotion-vibe",
     "emotion-state",
-    "processor",
+    "debug-processor",
     "barcode",
     "callback-tester"
 ]

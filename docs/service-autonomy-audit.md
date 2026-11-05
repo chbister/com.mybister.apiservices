@@ -1,6 +1,9 @@
 # Audit der Service-Autarkie (Analysebericht)
 
 > **Status:** Analyse abgeschlossen, **keine** funktionalen Änderungen umgesetzt.
+> **Nachtrag T1:** Die reine Umbenennung `processor` → `debug-processor` wurde auf dem
+> Branch `feature/debug-processor-rename` umgesetzt (benennungs- und routingrein, keine
+> funktionalen Abhängigkeiten verändert) – siehe Abschnitt 6.
 > **Datum:** 05.11.2026
 > **Grenze:** Diese Prüfung bewertet und dokumentiert ausschließlich. Es wurden keine
 > funktionalen Abhängigkeiten entfernt, keine Workflows umstrukturiert und keine
@@ -105,7 +108,7 @@ Die getroffenen Entscheidungen sind im **Entscheidungsprotokoll** (Abschnitt 6) 
 | emotion-vibe | Ja | Ja | keine ausgehend; wird von processor gerufen | Ja² | – |
 | emotion-state | Ja | Ja | keine ausgehend; wird von processor gerufen | Ja² | – |
 | emotion-hate | Ja | Ja | keine ausgehend; **nicht** von processor genutzt | Ja² | Design-Lücke dokumentieren (P7) |
-| processor *(→ debug-processor)* | Ja | **Nein**³ | ruft sentiment, emotion(base/nuance/vibe/state), ner auf (Docker-DNS-Defaults) | **Nein ohne Konfig**⁴ | Umbenennung zur Klarstellung (T1) + 6 `*_URL`-Variablen bei der HTTPS-Umstellung setzen |
+| debug-processor *(vormals processor)* | Ja | **Nein**³ | ruft sentiment, emotion(base/nuance/vibe/state), ner auf (Docker-DNS-Defaults) | **Nein ohne Konfig**⁴ | Umbenennung umgesetzt (T1); 6 `*_URL`-Variablen bei der HTTPS-Umstellung setzen |
 | tts | Ja | Ja | keine | Ja² | – |
 | convert | Ja | Ja | keine | Ja² | nur `edge`-Netz, kein `app`-Netz |
 | ocr | Ja | **Nein**⁵ | zwingend `ocr-worker` über Volume-Queue `ocr_jobs` | **Nein**⁶ | Worker-Pflichtigkeit dokumentieren (P2) |
@@ -151,7 +154,7 @@ funktional Teil des ocr-Deployments.
 
 | # | Befund | Bewertung | Status |
 |---|---|---|---|
-| T1 | processor-Defaults `http://<service>:8000/…` (Docker-DNS); Kommentar verweist auf Aliase, Code nutzt Service-Namen | möglicherweise vermeidbar | ✅ entschieden: Debug-Dienst, Umbenennung zu `debug-processor` (siehe Abschnitt 6) |
+| T1 | processor-Defaults `http://<service>:8000/…` (Docker-DNS); Kommentar verweist auf Aliase, Code nutzt Service-Namen | möglicherweise vermeidbar | ✅ umgesetzt: Debug-Dienst, umbenannt zu `debug-processor` (siehe Abschnitt 6) |
 | T2 | Host-Regeln `ask.mybister.com` (18 Services) bzw. `ask.vereinstalk.de` (ocr, extraction) | notwendig heute | ✅ entschieden: obsolet, werden entfernt; künftig nur `<service-id>.api.mybister.com` |
 | T3 | External-Netz `edge` (`EDGE_NETWORK_NAME`, Default `dev-shared-network`), geteilt mit fremden Stacks | notwendig fürs Routing | ✅ entschieden: bleibt unverändert |
 | T4 | `*-link`-Aliase in der Compose, im Code ungenutzt | möglicherweise vermeidbar (tote Konfiguration) | ⏳ später |
@@ -183,22 +186,23 @@ funktional Teil des ocr-Deployments.
 
 | # | Befund | Entscheidung | Status |
 |---|---|---|---|
-| T1 | processor-Defaults hardcoded | Der Service dient dem **Debugging** und wird zur Klarstellung zu **`debug-processor`** umbenannt; URL-Klarheit herstellen | ✅ entschieden (Umsetzung separat) |
+| T1 | processor-Defaults hardcoded | Der Service dient dem **Debugging** und wurde zur Klarstellung zu **`debug-processor`** umbenannt; URL-Klarheit herstellen | ✅ umgesetzt (Branch `feature/debug-processor-rename`); URL-Klarheit Teil der HTTPS-Umstellung (R1) |
 | T2 | Host-Regeln `ask.mybister.com`, `ask.vereinstalk.de` | **Obsolet** – künftig nur `<service-id>.api.mybister.com`; beide ask-Hosts werden **entfernt** (Teil der HTTPS-Umstellung) | ✅ entschieden |
 | T3 | External-Netz `edge` | **Bleibt unverändert** | ✅ akzeptiert |
 | T4 | `*-link`-Aliase (im Code ungenutzt) | Später prüfen | ⏳ aufgeschoben |
 | T5 | docker.sock-Pfad in `traefik-dev` (dev-only) | Später | ⏳ aufgeschoben |
 | T6 | `asr_jobs` über 4 ASR-Varianten geteilt | **Kann zunächst bleiben** | ✅ bewusst akzeptiert |
 
-**Umsetzungsaufwand Umbenennung `processor` → `debug-processor` (dokumentiert, nicht ausgeführt):**
+**Umsetzungsaufwand Umbenennung `processor` → `debug-processor` (umgesetzt auf Branch `feature/debug-processor-rename`):**
 
-- Registry-ID in `tools/service_registry.json`
-- DNS-CNAME `debug-processor.api.mybister.com` neu anlegen (`processor.api.mybister.com`
-  ggf. entfernen) – **keine** produktiven DNS-Änderungen ohne expliziten `--apply`-Lauf
-- Traefik-Router/PathPrefix `/debug-processor` in `docker-compose.yml`
-- Compose-Service-Name und zugehörige `-dev`-/Builder-Einträge
-- `tests/test_services.py` (`SERVICES`-Liste)
-- README- und Doku-Verweise
+- ✅ Registry-ID in `tools/service_registry.json`
+- ⏳ DNS-CNAME `debug-processor.api.mybister.com` neu anlegen (`processor.api.mybister.com`
+  ggf. entfernen) – **keine** produktiven DNS-Änderungen ohne expliziten `--apply`-Lauf;
+  Ausführung durch den Nutzer
+- ✅ Traefik-Router/PathPrefix `/debug-processor` in `docker-compose.yml`
+- ✅ Compose-Service-Name und zugehörige `-dev`-/Builder-Einträge
+- ✅ `tests/test_services.py` / `tests/conftest.py` (`SERVICES`-Liste)
+- ✅ README- und Doku-Verweise
 
 ---
 
@@ -239,7 +243,7 @@ funktional Teil des ocr-Deployments.
 
 | # | Problem | Status |
 |---|---|---|
-| P1 | Debug-Zweck + hardcoded Docker-DNS-Adressen in `processor` | Lösungsweg entschieden: Umbenennung + URL-Klarheit (T1) |
+| P1 | Debug-Zweck + hardcoded Docker-DNS-Adressen in `processor` | Umbenennung umgesetzt (T1); URL-Klarheit bei HTTPS-Umstellung offen (R1) |
 | P2 | OCR-Async als Dateisystem-Queue zwischen zwei Containern → Host-Gebundenheit und stille Fehler ohne Worker | offen |
 | P3 | Gemeinsamer Job-Statusordner über 4 ASR-Modellvarianten | zunächst akzeptiert (T6) |
 | P4 | Routing aktuell über gemeinsamen Host + PathPrefix; Umstellung auf `<service-id>.api.mybister.com`, Entfernung beider ask-Hosts | Umstellungsmaßnahme (T2, Teil HTTPS-Umstellung) |

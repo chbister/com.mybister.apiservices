@@ -322,7 +322,7 @@ Alle 21 eigenständig deploybaren Services aus `tools/service_registry.json`:
 | `emotion-state` | `emotion-state.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `emotion-vibe` | `emotion-vibe.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `emotion-hate` | `emotion-hate.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `processor` | `processor.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `debug-processor` | `debug-processor.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `tts` | `tts.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `convert` | `convert.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `ocr` | `ocr.api.mybister.com` | CNAME | `b03.mybister.com.` |
@@ -525,7 +525,7 @@ und sind unverändert übernommen:
 
 `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `sentiment`,
 `emotion`, `emotion-nuance`, `emotion-state`, `emotion-vibe`, `emotion-hate`,
-`processor`, `tts`, `convert`, `ocr`, `extraction`, `ner`, `resume`,
+`debug-processor`, `tts`, `convert`, `ocr`, `extraction`, `ner`, `resume`,
 `metadata`, `barcode`, `qrcode`
 
 Bewusst **nicht** aufgenommen (Abweichungen, in der Registry unter

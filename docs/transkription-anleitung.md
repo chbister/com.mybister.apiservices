@@ -42,7 +42,7 @@ pip install python-ulid pytest          # falls nicht schon vorhanden
 ```bash
 make local-asr           # POST /v1/asr + /v1/asr/gpu        → http://127.0.0.1:8100
 make local-diarization   # POST /v1/speaker-check + /v1/diarize → http://127.0.0.1:8101
-make local-processor     # POST /v1/process + /v1/transcript   → http://127.0.0.1:8102
+make local-debug-processor     # POST /v1/process + /v1/transcript   → http://127.0.0.1:8102
 ```
 
 Bereitschaft prüfen:
@@ -176,7 +176,7 @@ lsof -ti:8100 -ti:8101 -ti:8102 | xargs kill
 
 ```bash
 # Terminal 1-3:
-make local-asr & make local-diarization & make local-processor &   # oder einzeln
+make local-asr & make local-diarization & make local-debug-processor &   # oder einzeln
 
 FILE="/Users/christianbister/Downloads/GTLS_Tests_MMmT_9369.m4a"   # 57 Min., Mono-AAC
 

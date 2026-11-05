@@ -69,10 +69,10 @@
       "path": "/emotion-hate"
     },
     {
-      "id": "processor",
-      "description": "Transkript-Processor / Aggregator",
-      "compose_service": "processor",
-      "path": "/processor"
+      "id": "debug-processor",
+      "description": "Debug-Transkript-Processor / Aggregator",
+      "compose_service": "debug-processor",
+      "path": "/debug-processor"
     },
     {
       "id": "tts",
