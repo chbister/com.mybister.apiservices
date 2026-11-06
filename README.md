@@ -98,6 +98,14 @@ Async document OCR with a dedicated worker container (`ocr-worker`).
 - **Status/Download**: `GET https://ocr.api.mybister.com/v1/ocr/status/{job_id}` and `GET https://ocr.api.mybister.com/v1/ocr/download/{job_id}`.
 - Deployed in the `careergraph` profile (`make up-careergraph-prod|dev`), production host `ocr.api.mybister.com`.
 
+### 6b. OCR PDF (Node.js, `ocrpdf-service`)
+Asynchronous PDF OCR (Tesseract/Poppler/Ghostscript) embedded from the standalone repo `com.mybister.ocr`.
+- **Endpoint**: `POST https://ocrpdf.api.mybister.com/ocr` (multipart: `file` + `callbackUrl`) – returns `202 {id}` immediately; the result is delivered as a multipart POST to `callbackUrl`.
+- **Health**: `GET https://ocrpdf.api.mybister.com/` (plain text; no `/health` route, therefore not in the test `SERVICES` lists).
+- **Prod topology**: `ocrpdf` replicas (default `OCRPDF_REPLICAS=2`) behind the nginx load balancer `ocrpdf-lb` (`least_conn`, `client_max_body_size 48M`); Traefik routes to the LB on port 3000.
+- **Dev**: single container `ocrpdf-dev` via path routing `http://localhost/ocrpdf/...`.
+- **Config**: `OCRPDF_REPLICAS`, `TEMP_MAX_AGE_HOURS`, `CALLBACK_TIMEOUT_MS`; job artifacts in `./ocrpdf-uploads` (mounted to `/app/temp`).
+
 ### 7. Extraction & NER
 - **Extraction**: `POST https://extraction.api.mybister.com/v1/extract` – extracts structured data (names, phone numbers, …) from text/lines via pluggable extractor strategies (`mode`). Production host `extraction.api.mybister.com`.
 - **NER**: `POST https://ner.api.mybister.com/v1/ner` – named entity recognition, async with

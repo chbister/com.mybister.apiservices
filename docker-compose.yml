@@ -1514,6 +1514,85 @@ services:
         aliases:
           - metadata-link
 
+  # --- OCR PDF (Node.js, externes Repo com.mybister.ocr, eingebettet in ocrpdf-service/) ---
+  # Prod: skalierte ocrpdf-Replicas hinter dem nginx-LB (least_conn, 48M body limit).
+  ocrpdf:
+    image: ghcr.io/chbister/ocrpdf:latest
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: "production"
+      TEMP_MAX_AGE_HOURS: "${TEMP_MAX_AGE_HOURS:-24}"
+      CALLBACK_TIMEOUT_MS: "${CALLBACK_TIMEOUT_MS:-30000}"
+    volumes:
+      - ./ocrpdf-uploads:/app/temp
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      - app
+
+  ocrpdf-lb:
+    image: nginx:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.ocrpdf.rule=Host(`ocrpdf.api.mybister.com`)"
+      - "traefik.http.routers.ocrpdf.entrypoints=websecure"
+      - "traefik.http.routers.ocrpdf.tls=true"
+      - "traefik.http.routers.ocrpdf.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ocrpdf.middlewares=apikey-auth"
+      - "traefik.http.services.ocrpdf.loadbalancer.server.port=3000"
+    expose:
+      - "3000"
+    volumes:
+      - ./ocrpdf-service/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ocrpdf
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - ocrpdf-link
+
+  ocrpdf-image-builder:
+    build:
+      context: ./ocrpdf-service
+    image: ghcr.io/chbister/ocrpdf:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service ocrpdf-image-builder is only for building the image"]
+    restart: "no"
+
+  # Dev: einzelner Container ohne LB, Pfad-Routing wie alle anderen Services.
+  ocrpdf-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.ocrpdf-dev.rule=PathPrefix(`/ocrpdf`)"
+      - "traefik.http.routers.ocrpdf-dev.entrypoints=web"
+      - "traefik.http.routers.ocrpdf-dev.middlewares=ocrpdf-strip"
+      - "traefik.http.middlewares.ocrpdf-strip.stripprefix.prefixes=/ocrpdf"
+      - "traefik.http.services.ocrpdf-dev.loadbalancer.server.port=3000"
+    build:
+      context: ./ocrpdf-service
+    image: ocrpdf:local
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: "production"
+      TEMP_MAX_AGE_HOURS: "${TEMP_MAX_AGE_HOURS:-24}"
+      CALLBACK_TIMEOUT_MS: "${CALLBACK_TIMEOUT_MS:-30000}"
+    volumes:
+      - ./ocrpdf-uploads:/app/temp
+    restart: unless-stopped
+    profiles: [ "dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - ocrpdf-link
+
 
 volumes:
   hf_cache:

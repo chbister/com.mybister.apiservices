@@ -23,7 +23,7 @@ fi
 
 # Execute command
 if [ "$ACTION" == "up" ]; then
-  docker compose --profile "$PROFILE" up -d --scale barcode=2 --scale metadata=2
+  docker compose --profile "$PROFILE" up -d --scale barcode=2 --scale metadata=2 --scale ocrpdf=${OCRPDF_REPLICAS:-2}
 else
   docker compose --profile "$PROFILE" down
 fi

@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log*
+.git
+.github
+.gitignore
+temp
+_uploads
+_uploads/**
+README.md
+docker-compose.yml
+Makefile
+.env
+.env.*
