@@ -21,7 +21,8 @@ SERVICES = [
     "emotion-state",
     "debug-processor",
     "barcode",
-    "callback-tester"
+    "callback-tester",
+    "ocrpdf"
 ]
 
 @pytest.fixture(scope="session", autouse=True)

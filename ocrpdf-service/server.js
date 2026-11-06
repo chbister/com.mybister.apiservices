@@ -186,6 +186,16 @@ app.get('/', (req, res) => {
   res.send(`OCR microservice running on ${hostname}`);
 });
 
+// Health-Check analog zu den anderen apiservices (tests/test_services.py)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'ocrpdf',
+    hostname: os.hostname(),
+    datetime: new Date().toISOString(),
+  });
+});
+
 app.post('/ocr', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
