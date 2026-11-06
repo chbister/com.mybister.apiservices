@@ -101,7 +101,7 @@ Async document OCR with a dedicated worker container (`ocr-worker`).
 ### 6b. OCR PDF (Node.js, `ocrpdf-service`)
 Asynchronous PDF OCR (Tesseract/Poppler/Ghostscript) embedded from the standalone repo `com.mybister.ocr`.
 - **Endpoint**: `POST https://ocrpdf.api.mybister.com/ocr` (multipart: `file` + `callbackUrl`) – returns `202 {id}` immediately; the result is delivered as a multipart POST to `callbackUrl`.
-- **Health**: `GET https://ocrpdf.api.mybister.com/` (plain text; no `/health` route, therefore not in the test `SERVICES` lists).
+- **Health**: `GET https://ocrpdf.api.mybister.com/health` (`{"status":"ok","service":"ocrpdf",...}`, also covered by the `SERVICES` health lists in `tests/`).
 - **Prod topology**: `ocrpdf` replicas (default `OCRPDF_REPLICAS=2`) behind the nginx load balancer `ocrpdf-lb` (`least_conn`, `client_max_body_size 48M`); Traefik routes to the LB on port 3000.
 - **Dev**: single container `ocrpdf-dev` via path routing `http://localhost/ocrpdf/...`.
 - **Config**: `OCRPDF_REPLICAS`, `TEMP_MAX_AGE_HOURS`, `CALLBACK_TIMEOUT_MS`; job artifacts in `./ocrpdf-uploads` (mounted to `/app/temp`).
