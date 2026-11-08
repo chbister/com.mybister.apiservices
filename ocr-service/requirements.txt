@@ -9,3 +9,4 @@ easyocr
 paddleocr
 paddlepaddle
 python-ulid
+pypdfium2>=4.30.0

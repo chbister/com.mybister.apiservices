@@ -36,6 +36,7 @@ OCR_CONFIG = os.getenv("OCR_CONFIG")
 OCR_PROFILE = os.getenv("OCR_PROFILE", "screenshot").lower()
 OCR_MAX_IMAGE_WIDTH = int(os.getenv("OCR_MAX_IMAGE_WIDTH", "1600"))
 OCR_MAX_IMAGE_HEIGHT = int(os.getenv("OCR_MAX_IMAGE_HEIGHT", "3000"))
+OCR_MAX_PAGES = int(os.getenv("OCR_MAX_PAGES", "10"))
 
 # Role configuration
 SERVICE_ROLE = os.getenv("SERVICE_ROLE", "API").upper() # API or WORKER
@@ -130,11 +131,11 @@ class AsyncJobResponse(BaseModel):
     callback_url: Optional[str] = None
     message: str
 
-def enqueue_job(job_id: str, contents: bytes, callback_url: Optional[str], file_name: Optional[str], file_url: Optional[str]):
+def enqueue_job(job_id: str, contents: bytes, callback_url: Optional[str], file_name: Optional[str], file_url: Optional[str], max_pages: Optional[int] = None):
     image_path = os.path.join(JOBS_DIR, f"{job_id}.img")
     with open(image_path, "wb") as f:
         f.write(contents)
-        
+
     job_file = os.path.join(JOBS_DIR, f"{job_id}.json")
     job_data = {
         "job_id": job_id,
@@ -143,7 +144,8 @@ def enqueue_job(job_id: str, contents: bytes, callback_url: Optional[str], file_
         "payload": {
             "callback_url": callback_url,
             "file_name": file_name,
-            "file_url": file_url
+            "file_url": file_url,
+            "max_pages": max_pages,
         }
     }
     with open(job_file, "w") as f:
@@ -170,7 +172,8 @@ def health():
         "datetime": datetime.utcnow().isoformat(),
         "config": {
             "ocr_engine": OCR_ENGINE_TYPE,
-            "ocr_language": OCR_LANG
+            "ocr_language": OCR_LANG,
+            "ocr_max_pages": OCR_MAX_PAGES
         }
     }
 
@@ -178,16 +181,17 @@ def health():
 async def process_image(
     file: Optional[UploadFile] = File(None),
     file_url: Optional[str] = Form(None),
-    callback_url: Optional[str] = Form(None)
+    callback_url: Optional[str] = Form(None),
+    max_pages: Optional[int] = Form(None)
 ):
-    logger.info("OCR request received file=%s, callback=%s", 
-                file.filename if file else "None", callback_url)
-    
+    logger.info("OCR request received file=%s, callback=%s, max_pages=%s",
+                file.filename if file else "None", callback_url, max_pages)
+
     contents = await get_image_bytes(file, file_url)
     file_name = file.filename if file else None
-    
+
     job_id = f"{ulid.ULID()}-{socket.gethostname()}"
-    enqueue_job(job_id, contents, callback_url, file_name, file_url)
+    enqueue_job(job_id, contents, callback_url, file_name, file_url, max_pages)
     
     return JSONResponse(
         status_code=202,
