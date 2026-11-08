@@ -459,11 +459,36 @@ async def lifespan(app: FastAPI):
         tts_manager.load_model()
     except Exception as e:
         logger.error(f"Failed to load model during startup: {e}")
+        if sentry_sdk is not None:
+            sentry_sdk.capture_exception(e)
+
         # We don't raise here to allow the service to start and respond to health checks
         # The service will return 503 for TTS requests if the model is not loaded
     yield
     # Shutdown
     pass
+
+# --- GlitchTip (Sentry-kompat): Errors + Traces -----------------------------
+# Nur aktiv, wenn SENTRY_DSN gesetzt ist (siehe .env.example / docker-compose).
+# Ohne DSN bzw. ohne installiertes sentry-sdk verhält sich der Service wie bisher.
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
+
+if sentry_sdk is not None and (_sentry_dsn := os.getenv("SENTRY_DSN")):
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "dev"),
+        release=os.getenv("SENTRY_RELEASE"),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        integrations=[FastApiIntegration()],
+        send_default_pii=False,
+    )
+    sentry_sdk.set_tag("service", "tts-service")
+    if os.getenv("SENTRY_SEND_TEST_EVENT"):
+        sentry_sdk.capture_message("tts-service: GlitchTip test event")
 
 app = FastAPI(title="TTS Microservice", lifespan=lifespan)
 

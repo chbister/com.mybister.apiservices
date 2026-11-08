@@ -38,6 +38,10 @@ WORKDIR /srv/app
 COPY requirements.txt /srv/app/requirements.txt
 RUN pip install --no-cache-dir -r /srv/app/requirements.txt
 
+
+# GlitchTip/Sentry-SDK als eigener Layer: der requirements-Layer (torch/whisper etc.)
+# bleibt damit gecacht und muss bei einem SDK-Update nicht neu gebaut werden.
+RUN pip install --no-cache-dir "sentry-sdk[fastapi]>=2.0"
 COPY app /srv/app
 
 ENV MODEL_PATH="microsoft/VibeVoice-ASR"

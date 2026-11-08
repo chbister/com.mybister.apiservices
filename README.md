@@ -227,6 +227,17 @@ GitHub Actions): **[docs/hetzner-dns.md](docs/hetzner-dns.md)**.
 
 ---
 
+## 📈 Error-Tracking (GlitchTip)
+
+Alle Services melden Exceptions und Performance-Traces an die selbst gehostete
+GlitchTip-Instanz (<https://glitchtip.mybister.com>, Sentry-kompatibel):
+konfiguriert über `SENTRY_DSN` in der `.env` – **leer = Tracking aus**,
+alle weiteren `SENTRY_*`-Variablen sind optional. Vollständige Beschreibung
+(Env-Vars, Background-Jobs, Docker-Layer, Verifikation, Datenschutz):
+**[docs/glitchtip.md](docs/glitchtip.md)**.
+
+---
+
 ## 🍎 Local GPU Runs (no Docker)
 
 > **Step-by-step guide (German):** [docs/transkription-anleitung.md](docs/transkription-anleitung.md)

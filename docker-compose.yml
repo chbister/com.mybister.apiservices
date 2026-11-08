@@ -2,6 +2,13 @@ x-common-env: &common-env
   HF_HOME: "/root/.cache/huggingface"
   HF_TOKEN: "${HF_TOKEN:-}"
   CALLBACK_AUTH_SECRET: "${CALLBACK_AUTH_SECRET:-}"
+  # GlitchTip (Sentry-kompat): leerer DSN = Fehler-Tracking deaktiviert.
+  # Siehe docs/glitchtip.md
+  SENTRY_DSN: "${SENTRY_DSN:-}"
+  SENTRY_ENVIRONMENT: "${SENTRY_ENVIRONMENT:-dev}"
+  SENTRY_TRACES_SAMPLE_RATE: "${SENTRY_TRACES_SAMPLE_RATE:-0.1}"
+  SENTRY_RELEASE: "${SENTRY_RELEASE:-}"
+  SENTRY_SEND_TEST_EVENT: "${SENTRY_SEND_TEST_EVENT:-}"
   REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
   SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
@@ -630,6 +637,8 @@ services:
       - "traefik.http.services.barcode.loadbalancer.server.port=8000"
     expose:
       - "8000"
+    environment:
+      <<: *common-env
     restart: unless-stopped
     profiles: [ "prod" ]
     networks:
@@ -691,6 +700,8 @@ services:
       - "traefik.http.services.qrcode.loadbalancer.server.port=8000"
     expose:
       - "8000"
+    environment:
+      <<: *common-env
     restart: unless-stopped
     profiles: [ "prod" ]
     networks:
@@ -1465,6 +1476,7 @@ services:
     expose:
       - "8000"
     environment:
+      <<: *common-env
       # Interne Transportadressen (Docker-DNS, unveraenderte Verarbeitungskette).
       # Fuer einen Umzug auf die HTTPS-Endpunkte hier die Werte tauschen (Audit R1).
       SENTIMENT_URL: "http://sentiment:8000/v1/sentiment"
@@ -1535,6 +1547,8 @@ services:
       - "8000"
     volumes:
       - callback_data:/srv/callbacks
+    environment:
+      <<: *common-env
     profiles: [ "prod" ]
     networks:
       edge:
@@ -1656,6 +1670,10 @@ services:
       NODE_ENV: "production"
       TEMP_MAX_AGE_HOURS: "${TEMP_MAX_AGE_HOURS:-24}"
       CALLBACK_TIMEOUT_MS: "${CALLBACK_TIMEOUT_MS:-30000}"
+      SENTRY_DSN: "${SENTRY_DSN:-}"
+      SENTRY_ENVIRONMENT: "${SENTRY_ENVIRONMENT:-dev}"
+      SENTRY_TRACES_SAMPLE_RATE: "${SENTRY_TRACES_SAMPLE_RATE:-0.1}"
+      SENTRY_RELEASE: "${SENTRY_RELEASE:-}"
     volumes:
       - ./ocrpdf-uploads:/app/temp
     restart: unless-stopped
@@ -1721,6 +1739,10 @@ services:
       NODE_ENV: "production"
       TEMP_MAX_AGE_HOURS: "${TEMP_MAX_AGE_HOURS:-24}"
       CALLBACK_TIMEOUT_MS: "${CALLBACK_TIMEOUT_MS:-30000}"
+      SENTRY_DSN: "${SENTRY_DSN:-}"
+      SENTRY_ENVIRONMENT: "${SENTRY_ENVIRONMENT:-dev}"
+      SENTRY_TRACES_SAMPLE_RATE: "${SENTRY_TRACES_SAMPLE_RATE:-0.1}"
+      SENTRY_RELEASE: "${SENTRY_RELEASE:-}"
     volumes:
       - ./ocrpdf-uploads:/app/temp
     restart: unless-stopped

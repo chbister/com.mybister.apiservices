@@ -31,6 +31,28 @@ DOWNLOAD_TIMEOUT_S = float(os.getenv("DOWNLOAD_TIMEOUT_S", "30"))
 JOB_TTL_SECONDS = int(os.getenv("JOB_TTL_SECONDS", "3600"))
 CALLBACK_AUTH_SECRET = os.getenv("CALLBACK_AUTH_SECRET")
 
+# --- GlitchTip (Sentry-kompat): Errors + Traces -----------------------------
+# Nur aktiv, wenn SENTRY_DSN gesetzt ist (siehe .env.example / docker-compose).
+# Ohne DSN bzw. ohne installiertes sentry-sdk verhält sich der Service wie bisher.
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
+
+if sentry_sdk is not None and (_sentry_dsn := os.getenv("SENTRY_DSN")):
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "dev"),
+        release=os.getenv("SENTRY_RELEASE"),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        integrations=[FastApiIntegration()],
+        send_default_pii=False,
+    )
+    sentry_sdk.set_tag("service", "metadata-service")
+    if os.getenv("SENTRY_SEND_TEST_EVENT"):
+        sentry_sdk.capture_message("metadata-service: GlitchTip test event")
+
 app = FastAPI(title=APP_NAME, version="1.0.0")
 
 # Very simple in-memory job store (good enough behind a gateway for lightweight async).
