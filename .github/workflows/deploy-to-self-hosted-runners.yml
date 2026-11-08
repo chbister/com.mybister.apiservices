@@ -67,6 +67,11 @@ jobs:
             -u "${{ github.actor }}" \
             --password-stdin
 
+      # Free disk space before pulling: stale containers, dangling images
+      # and build cache from older deployments pile up on the runners.
+      - name: Clean up docker system
+        run: docker system prune --force
+
       # The service list comes from the registry placement
       # (tools/service_registry.json, field "host"): all services and
       # components assigned to this runner, apikey-auth included ("*").
