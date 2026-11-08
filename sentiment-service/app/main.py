@@ -10,6 +10,28 @@ from transformers import pipeline
 APP_TITLE = "Sentiment Service (CPU)"
 MODEL_ID = os.getenv("SENTIMENT_MODEL_ID", "cardiffnlp/twitter-xlm-roberta-base-sentiment")
 
+# --- GlitchTip (Sentry-kompat): Errors + Traces -----------------------------
+# Nur aktiv, wenn SENTRY_DSN gesetzt ist (siehe .env.example / docker-compose).
+# Ohne DSN bzw. ohne installiertes sentry-sdk verhält sich der Service wie bisher.
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
+
+if sentry_sdk is not None and (_sentry_dsn := os.getenv("SENTRY_DSN")):
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "dev"),
+        release=os.getenv("SENTRY_RELEASE"),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        integrations=[FastApiIntegration()],
+        send_default_pii=False,
+    )
+    sentry_sdk.set_tag("service", "sentiment-service")
+    if os.getenv("SENTRY_SEND_TEST_EVENT"):
+        sentry_sdk.capture_message("sentiment-service: GlitchTip test event")
+
 app = FastAPI(title=APP_TITLE)
 
 # Lädt Modell einmal beim Start.

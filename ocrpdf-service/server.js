@@ -18,6 +18,20 @@ import {
   extractFirstPageAsPDF,
 } from './utils/ocr.js';
 import { logger } from './utils/logger.js';
+import * as Sentry from '@sentry/node';
+
+// --- GlitchTip (Sentry-kompat): Errors + Traces -----------------------------
+// Nur aktiv, wenn SENTRY_DSN gesetzt ist (siehe .env.example / docker-compose).
+// Ohne DSN verhält sich der Service wie bisher.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.SENTRY_ENVIRONMENT || 'dev',
+    release: process.env.SENTRY_RELEASE || undefined,
+    tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+  });
+  Sentry.setTag('service', 'ocrpdf-service');
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -255,6 +269,7 @@ app.post('/ocr', upload.single('file'), async (req, res) => {
     }
   } catch (error) {
     logger.error('OCR failed:', error.message);
+    Sentry.captureException(error);
     if (hasCallback) {
       try {
         await postErrorCallback(callbackUrl, {
@@ -273,10 +288,18 @@ app.post('/ocr', upload.single('file'), async (req, res) => {
   }
 });
 
+// Fehler-Handler muss nach den Routen registriert werden (Sentry-Doku).
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
+
 app.listen(3000, async () => {
   logger.info('OCR microservice listening on port 3000');
   const hostname = os.hostname();
   logger.info(`OCR microservice running on ${hostname}`);
+  if (process.env.SENTRY_DSN && process.env.SENTRY_SEND_TEST_EVENT) {
+    Sentry.captureMessage('ocrpdf-service: GlitchTip test event');
+  }
   await cleanupStaleTempFiles();
   setInterval(cleanupStaleTempFiles, 60 * 60 * 1000).unref();
 });

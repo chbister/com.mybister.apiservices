@@ -23,6 +23,25 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("ocr-worker")
+# --- GlitchTip (Sentry-kompat): Errors + Traces -----------------------------
+# Nur aktiv, wenn SENTRY_DSN gesetzt ist (siehe .env.example / docker-compose).
+# Ohne DSN bzw. ohne installiertes sentry-sdk verhält sich der Service wie bisher.
+try:
+    import sentry_sdk
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
+
+if sentry_sdk is not None and (_sentry_dsn := os.getenv("SENTRY_DSN")):
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "dev"),
+        release=os.getenv("SENTRY_RELEASE"),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        send_default_pii=False,
+    )
+    sentry_sdk.set_tag("service", "ocr-service")
+    if os.getenv("SENTRY_SEND_TEST_EVENT"):
+        sentry_sdk.capture_message("ocr-service: GlitchTip test event")
 
 # Configuration (mirrored from main.py)
 OCR_ENGINE_TYPE = os.getenv("OCR_ENGINE", "EASYOCR").upper()
@@ -203,6 +222,9 @@ async def process_job(job_id: str, job_data: Dict[str, Any]):
             
     except Exception as e:
         logger.error("Job %s failed: %s", job_id, str(e), exc_info=True)
+        if sentry_sdk is not None:
+            sentry_sdk.capture_exception(e)
+
         update_job_status(job_id, "failed", error=str(e))
         
         callback_url = job_data.get("payload", {}).get("callback_url")

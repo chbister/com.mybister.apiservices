@@ -26,6 +26,10 @@ WORKDIR /srv
 COPY requirements.txt /srv/requirements.txt
 RUN pip install --no-cache-dir -r /srv/requirements.txt
 
+
+# GlitchTip/Sentry-SDK als eigener Layer: der requirements-Layer (torch/whisper etc.)
+# bleibt damit gecacht und muss bei einem SDK-Update nicht neu gebaut werden.
+RUN pip install --no-cache-dir "sentry-sdk[fastapi]>=2.0"
 RUN python -c "import pyannote.audio; from pyannote.audio import Pipeline; print('pyannote OK')"
 RUN python -c "import pkgutil; print('pyannote' in [m.name for m in pkgutil.iter_modules()])"
 

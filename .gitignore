@@ -3,3 +3,4 @@
 __pycache__
 .output.txt
 ocrpdf-uploads/
+node_modules/
