@@ -45,7 +45,7 @@ from tools.hetzner_dns.manager import (
     STATUS_UPDATED,
     HetznerDNSManager,
 )
-from tools.hetzner_dns.registry import ServiceDefinition, ServiceRegistry
+from tools.hetzner_dns.registry import ComponentDefinition, ServiceDefinition, ServiceRegistry
 
 TOKEN = "super-secret-hetzner-token-123"
 ZONE = "mybister.com"
@@ -1104,12 +1104,51 @@ def test_prod_routers_use_dedicated_service_hosts():
     assert "ask.vereinstalk.de" not in compose
 
 
-def test_registry_excludes_documented_components():
+def test_registry_roles_services_components_excluded():
     registry = ServiceRegistry.load()
+    service_ids = set(registry.ids)
+    component_ids = {component.id for component in registry.components}
     excluded_ids = {excluded.id for excluded in registry.excluded}
-    assert {"callback-tester", "ocr-worker", "apikey-auth"} <= excluded_ids
+
+    # components: deployable, but no DNS management
+    assert {"callback-tester", "ocr-worker", "apikey-auth"} == component_ids
+    # excluded: neither DNS nor deployment (documentation only)
+    assert {"gateway", "food-recognition", "statusbar", "asr-vibevoice"} == excluded_ids
+    # roles do not overlap
+    assert not (service_ids & component_ids)
+    assert not (service_ids & excluded_ids)
+    assert not (component_ids & excluded_ids)
     for service_id in ("ocr-worker", "apikey-auth", "callback-tester", "gateway"):
-        assert service_id not in registry.ids
+        assert service_id not in service_ids
+
+
+def test_registry_components_have_valid_hosts():
+    registry = ServiceRegistry.load()
+    hosts = {component.id: component.host for component in registry.components}
+    assert hosts["apikey-auth"] == "*"  # runs everywhere
+    for component_id, host in hosts.items():
+        assert host, f"{component_id} hat keinen Ziel-Host"
+        if host != "*":
+            assert re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)*", host), host
+
+
+def test_registry_keeps_ocr_worker_next_to_ocr():
+    """ocr and ocr-worker share a filesystem queue and must stay together."""
+    registry = ServiceRegistry.load()
+    worker = next(c for c in registry.components if c.id == "ocr-worker")
+    assert worker.host == registry.get("ocr").host
+
+
+def test_registry_rejects_bad_component_hosts():
+    with pytest.raises(ValidationError):
+        ServiceRegistry(
+            components=(ComponentDefinition(id="x-worker", host="b03!"),),
+        )
+    with pytest.raises(ValidationError):
+        ServiceRegistry(
+            services=(ServiceDefinition(id="dup"),),
+            components=(ComponentDefinition(id="dup", host="b01"),),
+        )
 
 
 # --------------------------------------------------------------------------- #

@@ -1,6 +1,5 @@
 {
   "version": 1,
-  "description": "Zentrale, deklarative Liste der eigenstaendig deploybaren API-Services. Basis fuer das Hetzner-DNS-Tool (tools.hetzner_dns) und spaeter fuer Deployment- und Ressourcenplanung. Enthaelt ausschliesslich Services mit eigenem oeffentlichem HTTP-Endpunkt (Traefik-Host-Regel in docker-compose.yml).",
   "services": [
     {
       "id": "asr-tiny",
@@ -135,19 +134,27 @@
       "host": "b03"
     }
   ],
-  "excluded": [
+  "components": [
     {
-      "id": "callback-tester",
-      "reason": "Webhook-Testempfenger - interne Hilfskomponente, kein produktiver Service"
+      "id": "apikey-auth",
+      "compose_service": "apikey-auth",
+      "host": "*",
+      "description": "Traefik-ForwardAuth-Middleware, laeuft auf jedem Host"
     },
     {
       "id": "ocr-worker",
-      "reason": "Worker ohne oeffentlichen HTTP-Endpunkt (kein Traefik-Router)"
+      "compose_service": "ocr-worker",
+      "host": "b03",
+      "description": "Async-Worker zur ocr (gemeinsame Dateisystem-Queue)"
     },
     {
-      "id": "apikey-auth",
-      "reason": "Traefik-ForwardAuth-Middleware (Infrastruktur)"
-    },
+      "id": "callback-tester",
+      "compose_service": "callback-tester",
+      "host": "b02",
+      "description": "Webhook-Testempfaenger (CNAME manuell, kein Registry-DNS)"
+    }
+  ],
+  "excluded": [
     {
       "id": "gateway",
       "reason": "nginx-Gateway in docker-compose.yml auskommentiert"

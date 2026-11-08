@@ -333,6 +333,7 @@ def cmd_services(args: argparse.Namespace) -> int:
         _json_dump(
             {
                 "services": [service.to_dict() for service in registry],
+                "components": [component.to_dict() for component in registry.components],
                 "excluded": [
                     {"id": excluded.id, "reason": excluded.reason} for excluded in registry.excluded
                 ],
@@ -345,8 +346,16 @@ def cmd_services(args: argparse.Namespace) -> int:
         for service in registry
     ]
     _print_table(["SERVICE", "DNS NAME", "HOST", "DESCRIPTION"], rows)
+    if registry.components:
+        print("\nKomponenten (deployierbar, kein eigener CNAME):")
+        component_rows = [
+            [component.id, component.compose_service or component.id, component.host or "-",
+             component.description]
+            for component in registry.components
+        ]
+        _print_table(["COMPONENT", "COMPOSE SERVICE", "HOST", "DESCRIPTION"], component_rows)
     if registry.excluded:
-        print("\nNicht verwaltet (kein CNAME):")
+        print("\nNicht verwaltet (kein DNS, kein Deployment):")
         for excluded in registry.excluded:
             print(f"  - {excluded.id}: {excluded.reason}")
     return EXIT_OK

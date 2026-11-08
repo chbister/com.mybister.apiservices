@@ -1,8 +1,13 @@
 name: Deploy to self-hosted runners
 
-run-name: Deploy to ${{ inputs.target }}
+run-name: Deploy ${{ inputs.target && format('to {0}', inputs.target) || 'to all hosts (auto)' }}
 
 on:
+  workflow_run:
+    workflows:
+      - Build and Push Docker Images
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       target:
@@ -14,15 +19,32 @@ on:
           - b03
         required: true
         default: b01
+      prune:
+        description: "Stop services not assigned to this runner"
+        type: boolean
+        default: false
 
 jobs:
   deploy:
-    name: Start base (apikey-auth) on ${{ inputs.target }}
-    runs-on: [self-hosted, com-mybister-apiservices, "${{ inputs.target }}"]
+    name: Deploy to ${{ matrix.target }}
+    # Auto: every runner after a successful main build.
+    # Manual: only the selected runner.
+    if: >
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == matrix.target)
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [b01, b02, b03]
+
+    runs-on: [self-hosted, com-mybister-apiservices, "${{ matrix.target }}"]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Login to GHCR
         run: |
@@ -30,9 +52,24 @@ jobs:
             -u "${{ github.actor }}" \
             --password-stdin
 
-      # Minimal base: only the ForwardAuth middleware every production router
-      # references. All other services are started manually on the host
-      # (docker compose --profile prod up -d <services>).
-      - name: Start base profile (apikey-auth)
+      # The service list comes from the registry placement
+      # (tools/service_registry.json, field "host"): all services and
+      # components assigned to this runner, apikey-auth included ("*").
+      - name: Start services of this host
         run: |
-          docker compose --env-file /home/theuser/__dotenv__/env.apiservices --profile base up -d
+          SERVICES="$(python3 tools/deploy_targets.py ${{ matrix.target }})"
+          echo "Starting on ${{ matrix.target }}: $SERVICES"
+          SCALE=""
+          case " $SERVICES " in *" barcode "*) SCALE="$SCALE --scale barcode=2" ;; esac
+          case " $SERVICES " in *" metadata "*) SCALE="$SCALE --scale metadata=2" ;; esac
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices pull $SERVICES
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices up -d $SCALE $SERVICES
+          docker image prune -f
+
+      - name: Stop services not assigned to this host
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.prune }}
+        run: |
+          OTHERS="$(python3 tools/deploy_targets.py ${{ matrix.target }} --others)"
+          if [ -n "$OTHERS" ]; then
+            docker compose --env-file /home/theuser/__dotenv__/env.apiservices rm -sf $OTHERS
+          fi

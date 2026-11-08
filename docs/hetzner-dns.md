@@ -582,18 +582,34 @@ Registry die Single Source of Truth für DNS **und** Verteilung:
 | `b03` | `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `ocr`, `ocrpdf`, `metadata` |
 
 Das Feld treibt die `EXPECTED`-Spalte in `list`/`get` (Fallback:
-`DEFAULT_DOCKER_HOST`) und `sync` (Abschnitt 5.5) an und steht der künftigen
-Deployment-Automatisierung als Zuordnung zur Verfügung. Erlaubt sind kurze
-Hostnamen (`b03`) oder FQDNs (`b03.mybister.com`).
+`DEFAULT_DOCKER_HOST`) und `sync` (Abschnitt 5.5) an. **Und es steuert das
+Deployment:** Der Workflow „Deploy to self-hosted runners" startet auf jedem
+Host genau die Services aus `services` + `components` mit passendem `host`;
+die Liste liefert `tools/deploy_targets.py` (stdlib-only, läuft auf den
+Runnern ohne venv):
 
-Bewusst **nicht** aufgenommen (Abweichungen, in der Registry unter
-`excluded` dokumentiert):
+```bash
+python3 tools/deploy_targets.py b03          # Compose-Services für b03
+python3 tools/deploy_targets.py b03 --others # alle NICHT für b03 (Prune-Kandidaten)
+```
+
+Erlaubt sind kurze Hostnamen (`b03`) oder FQDNs (`b03.mybister.com`).
+
+**Rollen in der Registry:** Die Registry hat drei Listen mit klarer
+Verantwortung – `services` (DNS **und** Deployment), `components` (nur
+Deployment, kein eigener CNAME) und `excluded` (weder noch, nur
+Dokumentation):
+
+| Komponente | `host` | Rolle |
+|---|---|---|
+| `apikey-auth` | `*` (jeder Host) | Traefik-ForwardAuth-Middleware (Infrastruktur) |
+| `ocr-worker` | `b03` | Async-Worker zur `ocr` (gemeinsame Dateisystem-Queue) |
+| `callback-tester` | `b02` | Webhook-Testempfänger – CNAME manuell, kein Registry-DNS |
+
+Bewusst **nicht** aufgenommen (unter `excluded` dokumentiert):
 
 | Komponente | Grund |
 |---|---|
-| `callback-tester` | Webhook-Testempfänger – interne Hilfskomponente |
-| `ocr-worker` | Worker ohne öffentlichen HTTP-Endpunkt (kein Traefik-Router) |
-| `apikey-auth` | Traefik-ForwardAuth-Middleware (Infrastruktur) |
 | `gateway` | nginx-Gateway in `docker-compose.yml` auskommentiert |
 | `food-recognition` | Code vorhanden, aber nicht in `docker-compose.yml` deploybar |
 | `statusbar` | Code vorhanden, aber nicht in `docker-compose.yml` deploybar |

@@ -46,15 +46,36 @@ from .errors import (
     ValidationError,
     ZoneNotFoundError,
 )
-from .manager import (
-    ALL_STATUSES,
-    CHANGE_POLICIES,
-    ChangeResult,
-    HetznerDNSManager,
-    ServiceRecord,
-    summarize,
+from .registry import ComponentDefinition, ServiceDefinition, ServiceRegistry
+
+_MANAGER_EXPORTS = frozenset(
+    {
+        "ALL_STATUSES",
+        "CHANGE_POLICIES",
+        "ChangeResult",
+        "HetznerDNSManager",
+        "ServiceRecord",
+        "summarize",
+    }
 )
-from .registry import ServiceDefinition, ServiceRegistry
+
+
+def __getattr__(name: str):
+    """Lazy import of the manager/client layer (needs ``httpx``).
+
+    Keeps ``from tools.hetzner_dns import HetznerDNSManager`` working while
+    stdlib-only modules (``registry``) stay importable without httpx - the
+    deployment tooling relies on that.
+    """
+    if name in _MANAGER_EXPORTS:
+        from . import manager as _manager
+
+        return getattr(_manager, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return sorted(set(globals()) | set(_MANAGER_EXPORTS))
 
 __all__ = [
     "ALL_STATUSES",
@@ -63,6 +84,7 @@ __all__ = [
     "ActionTimeoutError",
     "APIError",
     "ChangeResult",
+    "ComponentDefinition",
     "ConfigError",
     "DnsConfig",
     "HetznerDNSManager",
