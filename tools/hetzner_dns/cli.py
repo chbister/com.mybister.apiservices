@@ -109,6 +109,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_bulk.set_defaults(func=cmd_bulk)
 
+    p_sync = subparsers.add_parser(
+        "sync",
+        parents=[common],
+        help="alle Service-CNAMEs auf ihre Registry-Zuordnung (host) abgleichen",
+    )
+    p_sync.add_argument("--apply", action="store_true", help="Aenderungen tatsaechlich schreiben")
+    p_sync.set_defaults(func=cmd_sync)
+
     p_services = subparsers.add_parser(
         "services", parents=[common], help="Service-Registry anzeigen (ohne API-Zugriff)"
     )
@@ -280,6 +288,31 @@ def cmd_bulk(args: argparse.Namespace) -> int:
     return _exit_for_results(results)
 
 
+def cmd_sync(args: argparse.Namespace) -> int:
+    manager = _build_manager()
+    plan = manager.plan_sync()
+    results = manager.apply_bulk(plan) if args.apply else list(plan)
+
+    if args.json:
+        _json_dump(
+            {
+                "dry_run": not args.apply,
+                "summary": summarize(results),
+                "results": [change.to_dict() for change in results],
+            }
+        )
+        return _exit_for_results(results)
+
+    for change in results:
+        _print_change(change, width=max(len(c.fqdn) for c in results))
+    _print_summary(results)
+    if not args.apply:
+        print("\nDRY RUN - No DNS changes applied.")
+    else:
+        print("\nApplied.")
+    return _exit_for_results(results)
+
+
 def cmd_services(args: argparse.Namespace) -> int:
     registry_path = (os.environ.get("API_SERVICES_REGISTRY") or "").strip() or None
     registry = ServiceRegistry.load(Path(registry_path) if registry_path else None)
@@ -295,10 +328,10 @@ def cmd_services(args: argparse.Namespace) -> int:
         return EXIT_OK
     service_domain = (os.environ.get("API_SERVICES_DOMAIN") or "api.mybister.com").strip()
     rows = [
-        [service.id, f"{service.id}.{service_domain}", service.description]
+        [service.id, f"{service.id}.{service_domain}", service.host or "-", service.description]
         for service in registry
     ]
-    _print_table(["SERVICE", "DNS NAME", "DESCRIPTION"], rows)
+    _print_table(["SERVICE", "DNS NAME", "HOST", "DESCRIPTION"], rows)
     if registry.excluded:
         print("\nNicht verwaltet (kein CNAME):")
         for excluded in registry.excluded:

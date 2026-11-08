@@ -140,6 +140,8 @@ python -m tools.hetzner_dns set asr-small b02 --apply
 python -m tools.hetzner_dns bulk --host b03     # Bulk-Plan für alle Services
 python -m tools.hetzner_dns bulk --host b03 --apply
 python -m tools.hetzner_dns bulk --host b03 --apply --force
+python -m tools.hetzner_dns sync                # Abgleich mit der Registry-Verteilung (Dry-Run)
+python -m tools.hetzner_dns sync --apply
 python -m tools.hetzner_dns services            # Service-Registry anzeigen
 python -m tools.hetzner_dns services --json
 ```
@@ -160,11 +162,12 @@ SERVICE       DNS NAME                         TARGET             TTL  EXPECTED 
 ------------  -------------------------------  -----------------  ---  ----------------  --------
 asr-tiny      asr-tiny.api.mybister.com        b03.mybister.com.  60   b03.mybister.com. PRESENT
 asr-small     asr-small.api.mybister.com       -                  -    b03.mybister.com. MISSING
-sentiment     sentiment.api.mybister.com       b01.mybister.com.  60   b03.mybister.com. DIFFERS
+sentiment     sentiment.api.mybister.com       b01.mybister.com.  60   b01.mybister.com. PRESENT
 ocr           ocr.api.mybister.com             b03.mybister.com   60   b03.mybister.com. DIFFERS
 ```
 
-- `PRESENT` = CNAME existiert und zeigt auf den erwarteten Host (`DEFAULT_DOCKER_HOST`)
+- `PRESENT` = CNAME existiert und zeigt auf den erwarteten Host (Registry-Feld
+  `host`, Fallback `DEFAULT_DOCKER_HOST` – siehe Abschnitt 13)
 - `DIFFERS` = CNAME existiert, zeigt aber woanders hin (nur Information –
   keine automatische Änderung). Auch ein Wert, dem nur der
   abschließende Punkt fehlt (`ocr` im Beispiel), liefert `DIFFERS` –
@@ -304,7 +307,27 @@ python -m tools.hetzner_dns bulk --host b03 --force --apply
 python -m tools.hetzner_dns bulk --host b03
 ```
 
-### 5.5 `services` – Service-Registry
+### 5.5 `sync` – auf die Registry-Verteilung abgleichen
+
+```bash
+python -m tools.hetzner_dns sync            # Dry-Run: was würde sich ändern?
+python -m tools.hetzner_dns sync --apply    # tatsächlich schreiben
+```
+
+`sync` gleicht **jeden** Service gegen den in der Registry hinterlegten
+Ziel-Host ab (`host`-Feld, siehe Abschnitt 13) – also gegen die geplante
+Deployment-Verteilung (b01/b02/b03). Fehlende CNAMEs werden geplant
+(`CREATE`), abweichende umgestellt (`UPDATE`), bereits korrekte
+übersprungen (`SKIP`). Services **ohne** `host`-Eintrag erscheinen als
+`ERROR`, bis die Zuordnung in der Registry ergänzt ist.
+
+Anders als `bulk` (bewusst konservativ: abweichendes nur mit `--force`)
+überschreibt `sync` abweichende CNAMEs bereits mit `--apply`, weil die
+Registry die verbindliche Verteilungsplanung ist. Trotzdem gilt: zuerst den
+Dry-Run prüfen. Damit eignet sich `sync --apply` auch als idempotenter
+Abgleich für die spätere Deployment-Automatisierung.
+
+### 5.6 `services` – Service-Registry
 
 ```bash
 python -m tools.hetzner_dns services
@@ -316,31 +339,33 @@ ohne Token.
 
 ## 6. Geplante CNAMEs (Erstinitialisierung)
 
-Alle 21 eigenständig deploybaren Services aus `tools/service_registry.json`:
+Alle 22 eigenständig deploybaren Services aus `tools/service_registry.json`
+(Ziel-Host jeweils aus dem Registry-Feld `host`):
 
-| Service-ID | DNS-Name | Typ | Ziel (initial) |
+| Service-ID | DNS-Name | Typ | Ziel |
 |---|---|---|---|
 | `asr-tiny` | `asr-tiny.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `asr-small` | `asr-small.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `asr-medium` | `asr-medium.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `asr-large` | `asr-large.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `diarization` | `diarization.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `sentiment` | `sentiment.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `emotion` | `emotion.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `emotion-nuance` | `emotion-nuance.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `emotion-state` | `emotion-state.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `emotion-vibe` | `emotion-vibe.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `emotion-hate` | `emotion-hate.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `debug-processor` | `debug-processor.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `tts` | `tts.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `convert` | `convert.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `sentiment` | `sentiment.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `emotion` | `emotion.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `emotion-nuance` | `emotion-nuance.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `emotion-state` | `emotion-state.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `emotion-vibe` | `emotion-vibe.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `emotion-hate` | `emotion-hate.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `debug-processor` | `debug-processor.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `tts` | `tts.api.mybister.com` | CNAME | `b02.mybister.com.` |
+| `convert` | `convert.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `ocr` | `ocr.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `extraction` | `extraction.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `ner` | `ner.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `resume` | `resume.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `ocrpdf` | `ocrpdf.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `extraction` | `extraction.api.mybister.com` | CNAME | `b02.mybister.com.` |
+| `ner` | `ner.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `resume` | `resume.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `metadata` | `metadata.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `barcode` | `barcode.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `qrcode` | `qrcode.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `barcode` | `barcode.api.mybister.com` | CNAME | `b02.mybister.com.` |
+| `qrcode` | `qrcode.api.mybister.com` | CNAME | `b02.mybister.com.` |
 
 Skalierte Replikate (`--scale barcode=2`, `--scale metadata=2`) teilen sich
 jeweils **eine** Service-ID und erhalten **einen** CNAME.
@@ -531,12 +556,27 @@ Grundlage ist die zentrale, deklarative Registry **`tools/service_registry.json`
 Alle 21 vorab genannten Service-IDs existieren als eigenständig deploybare
 Services in `docker-compose.yml` (Traefik-Regel `Host(\`<service-id>.api.mybister.com\`)`,
 hostname-basiertes HTTPS-Routing ohne PathPrefix)
-und sind unverändert übernommen:
+und sind unverändert übernommen; inzwischen ergänzt: `ocrpdf`:
 
 `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `sentiment`,
 `emotion`, `emotion-nuance`, `emotion-state`, `emotion-vibe`, `emotion-hate`,
-`debug-processor`, `tts`, `convert`, `ocr`, `extraction`, `ner`, `resume`,
-`metadata`, `barcode`, `qrcode`
+`debug-processor`, `tts`, `convert`, `ocr`, `ocrpdf`, `extraction`, `ner`,
+`resume`, `metadata`, `barcode`, `qrcode`
+
+**Ziel-Host pro Service (Feld `host`):** Jeder Registry-Eintrag trägt den
+Host, auf dem der Service in der Deployment-Verteilung läuft – damit ist die
+Registry die Single Source of Truth für DNS **und** Verteilung:
+
+| Host | Services |
+|---|---|
+| `b01` | `sentiment`, `ner`, `emotion`, `emotion-nuance`, `emotion-state`, `emotion-vibe`, `emotion-hate`, `debug-processor` |
+| `b02` | `tts`, `convert`, `extraction`, `resume`, `barcode`, `qrcode` |
+| `b03` | `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `ocr`, `ocrpdf`, `metadata` |
+
+Das Feld treibt die `EXPECTED`-Spalte in `list`/`get` (Fallback:
+`DEFAULT_DOCKER_HOST`) und `sync` (Abschnitt 5.5) an und steht der künftigen
+Deployment-Automatisierung als Zuordnung zur Verfügung. Erlaubt sind kurze
+Hostnamen (`b03`) oder FQDNs (`b03.mybister.com`).
 
 Bewusst **nicht** aufgenommen (Abweichungen, in der Registry unter
 `excluded` dokumentiert):

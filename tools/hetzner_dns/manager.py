@@ -34,7 +34,7 @@ from .errors import (
     HetznerDNSError,
     ValidationError,
 )
-from .registry import ServiceRegistry
+from .registry import ServiceDefinition, ServiceRegistry
 from .validators import (
     absolute_in_zone,
     normalize_target_host,
@@ -216,6 +216,16 @@ class HetznerDNSManager:
         """
         return to_relative(fqdn, self.config.zone)
 
+    def _expected_host_for(self, service: ServiceDefinition) -> Optional[str]:
+        """Assigned target host of *service* (registry ``host`` field).
+
+        Falls back to ``DEFAULT_DOCKER_HOST`` for services without an
+        assignment. Always absolute (trailing dot), like CNAME values.
+        """
+        if service.host:
+            return to_absolute(self.normalize_host(service.host))
+        return to_absolute(self.config.default_docker_host) if self.config.default_docker_host else None
+
     def normalize_host(self, host: str) -> str:
         """Normalize a short host name or FQDN to a target inside the zone."""
         return normalize_target_host(
@@ -279,7 +289,7 @@ class HetznerDNSManager:
             ttl=int(cname.get("ttl")) if cname is not None and cname.get("ttl") is not None else None,
             conflict_types=conflict_types,
             conflict_targets=conflict_targets,
-            expected_host=to_absolute(self.config.default_docker_host) if self.config.default_docker_host else None,
+            expected_host=self._expected_host_for(self.registry.get(service_id)),
         )
 
     # ------------------------------------------------------------------ #
@@ -417,6 +427,55 @@ class HetznerDNSManager:
                         fqdn=f"{service.id}.{self.config.service_domain}",
                         status=STATUS_FAILED,
                         target=to_absolute(normalized_host),
+                        message=str(exc),
+                        policy=policy,
+                    )
+                )
+        return plan
+
+    def plan_sync(self, *, force: bool = False) -> List[ChangeResult]:
+        """Plan the reconcile of every service with its registry ``host``.
+
+        Each service is compared against the target host assigned in the
+        registry (the deployment distribution): missing CNAMEs are planned
+        as ``created``, diverging ones as ``updated``. Services without an
+        assignment are reported as ``failed`` - add a ``host`` field for
+        them. With ``apply`` on :meth:`apply_bulk` the plan is written.
+        """
+        policy = POLICY_FORCE if force else POLICY_OVERWRITE
+        rrsets = self._client.list_rrsets(self.zone)
+        index = self._index_by_name(rrsets)
+        plan: List[ChangeResult] = []
+        for service in self.registry:
+            record = self._record_from_index(service.id, index)
+            if not service.host:
+                plan.append(
+                    ChangeResult(
+                        service_id=service.id,
+                        fqdn=self.fqdn(service.id),
+                        status=STATUS_FAILED,
+                        target="",
+                        current_target=record.target,
+                        ttl=record.ttl,
+                        applied=False,
+                        message=(
+                            f"Kein Ziel-Host fuer '{service.id}' in der Registry "
+                            "(Feld 'host' ergaenzen)"
+                        ),
+                        policy=policy,
+                    )
+                )
+                continue
+            try:
+                plan.append(self._plan(service.id, service.host, policy=policy, record=record))
+            except HetznerDNSError as exc:
+                plan.append(
+                    ChangeResult(
+                        service_id=service.id,
+                        fqdn=self.fqdn(service.id),
+                        status=STATUS_FAILED,
+                        target="",
+                        applied=False,
                         message=str(exc),
                         policy=policy,
                     )

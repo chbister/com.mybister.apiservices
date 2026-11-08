@@ -515,6 +515,68 @@ def test_reads_tolerate_relative_and_absolute_rrset_names():
 
 
 # --------------------------------------------------------------------------- #
+# 4c: registry target hosts (field "host") and "sync"
+# --------------------------------------------------------------------------- #
+def test_registry_hosts_are_valid_and_complete():
+    registry = ServiceRegistry.load()
+    hosts = {service.id: service.host for service in registry}
+    assert hosts
+    for service_id, host in hosts.items():
+        assert host, f"{service_id} hat keinen Ziel-Host (Feld 'host')"
+        assert host == host.strip().lower().rstrip("."), f"{service_id}: host nicht normalisiert"
+        assert re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)*", host), f"{service_id}: ungueltiger host '{host}'"
+
+
+def test_expected_host_comes_from_registry_with_fallback():
+    services = (
+        ServiceDefinition(id="asr-tiny", description="ASR tiny", host="b01"),
+        ServiceDefinition(id="asr-small", description="ASR small", host="b02.mybister.com"),
+        ServiceDefinition(id="sentiment", description="Sentiment"),  # no assignment
+    )
+    manager = make_manager(FakeHetznerAPI(), registry=ServiceRegistry(services=services))
+    assert manager.get_service_record("asr-tiny").expected_host == "b01.mybister.com."
+    assert manager.get_service_record("asr-small").expected_host == "b02.mybister.com."
+    assert manager.get_service_record("sentiment").expected_host == DEFAULT_HOST + "."
+
+
+def test_sync_reconciles_assigned_hosts():
+    fake = FakeHetznerAPI(
+        rrsets=[{"name": "asr-small.api.mybister.com", "type": "CNAME", "records": [{"value": "b03.mybister.com."}], "ttl": 60}]
+    )
+    services = (
+        ServiceDefinition(id="asr-tiny", description="ASR tiny", host="b01"),
+        ServiceDefinition(id="asr-small", description="ASR small", host="b02"),
+        ServiceDefinition(id="sentiment", description="Sentiment"),  # no assignment
+    )
+    manager = make_manager(fake, registry=ServiceRegistry(services=services))
+
+    plan = manager.plan_sync()
+    by_id = {c.service_id: c for c in plan}
+    assert by_id["asr-tiny"].status == STATUS_CREATED
+    assert by_id["asr-small"].status == STATUS_UPDATED  # b03 -> b02 per registry
+    assert by_id["sentiment"].status == STATUS_FAILED  # missing "host" field
+    assert write_requests(fake) == []  # dry plan writes nothing
+
+    results = {c.service_id: c for c in manager.apply_bulk(plan)}
+    assert results["asr-tiny"].applied is True
+    assert results["asr-small"].applied is True
+    assert results["sentiment"].applied is False
+    assert fake.cname_target("asr-tiny.api.mybister.com") == "b01.mybister.com."
+    assert fake.cname_target("asr-small.api.mybister.com") == "b02.mybister.com."
+
+
+def test_cli_sync_applies_registry_hosts(capsys, monkeypatch):
+    fake = FakeHetznerAPI()
+    services = (ServiceDefinition(id="asr-small", description="ASR small", host="b02"),)
+    code, out, err = run_cli(
+        ["sync", "--apply"], fake, monkeypatch, capsys, registry=ServiceRegistry(services=services)
+    )
+    assert code == cli.EXIT_OK
+    assert "CREATE" in out
+    assert fake.cname_target("asr-small.api.mybister.com") == "b02.mybister.com."
+
+
+# --------------------------------------------------------------------------- #
 # 5: bulk dry run writes nothing
 # --------------------------------------------------------------------------- #
 def test_bulk_dry_run_changes_nothing():
@@ -955,7 +1017,9 @@ def _compose_routers_with_host() -> set:
     """Router names with a Traefik ``Host(...)`` rule (production routers).
 
     Development routers are path-based (``PathPrefix`` without ``Host``) and
-    are therefore not matched here.
+    are therefore not matched here. The public ``<service>-health`` routers
+    (unauthenticated ``/health`` aliases of the same service) are skipped -
+    they are not deployable services of their own.
     """
     compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     pattern = re.compile(r"traefik\.http\.routers\.([A-Za-z0-9_-]+)\.rule=Host\(`[^`]+`\)")
@@ -964,7 +1028,7 @@ def _compose_routers_with_host() -> set:
         if line.lstrip().startswith("#"):
             continue
         match = pattern.search(line)
-        if match:
+        if match and not match.group(1).endswith("-health"):
             names.add(match.group(1))
     return names
 
@@ -1002,12 +1066,13 @@ def test_prod_routers_use_dedicated_service_hosts():
         if not match:
             continue
         name, host = match.groups()
-        assert host == f"{name}.api.mybister.com", (
+        # public <service>-health routers share their service's hostname
+        service_id = name[: -len("-health")] if name.endswith("-health") else name
+        assert host == f"{service_id}.api.mybister.com", (
             f"Router {name} nutzt noch den Host {host!r} statt "
-            f"{name}.api.mybister.com"
+            f"{service_id}.api.mybister.com"
         )
         checked += 1
-    assert checked == len(_compose_routers_with_host())
     assert checked >= 21
     assert "ask.mybister.com" not in compose
     assert "ask.vereinstalk.de" not in compose

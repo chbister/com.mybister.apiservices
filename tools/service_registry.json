@@ -5,112 +5,134 @@
     {
       "id": "asr-tiny",
       "description": "Speech-to-Text (Whisper tiny)",
-      "compose_service": "asr-tiny"
+      "compose_service": "asr-tiny",
+      "host": "b03"
     },
     {
       "id": "asr-small",
       "description": "Speech-to-Text (Whisper small)",
-      "compose_service": "asr-small"
+      "compose_service": "asr-small",
+      "host": "b03"
     },
     {
       "id": "asr-medium",
       "description": "Speech-to-Text (Whisper medium)",
-      "compose_service": "asr-medium"
+      "compose_service": "asr-medium",
+      "host": "b03"
     },
     {
       "id": "asr-large",
       "description": "Speech-to-Text (Whisper large-v3)",
-      "compose_service": "asr-large"
+      "compose_service": "asr-large",
+      "host": "b03"
     },
     {
       "id": "diarization",
       "description": "Sprecher-Diarization",
-      "compose_service": "diarization"
+      "compose_service": "diarization",
+      "host": "b03"
     },
     {
       "id": "sentiment",
       "description": "Sentiment-Analyse",
-      "compose_service": "sentiment"
+      "compose_service": "sentiment",
+      "host": "b01"
     },
     {
       "id": "emotion",
       "description": "Emotion-Erkennung (Standard-Modell)",
-      "compose_service": "emotion"
+      "compose_service": "emotion",
+      "host": "b01"
     },
     {
       "id": "emotion-nuance",
       "description": "Emotion-Erkennung (Nuance-Modell)",
-      "compose_service": "emotion-nuance"
+      "compose_service": "emotion-nuance",
+      "host": "b01"
     },
     {
       "id": "emotion-state",
       "description": "Emotion-Erkennung (State-Modell)",
-      "compose_service": "emotion-state"
+      "compose_service": "emotion-state",
+      "host": "b01"
     },
     {
       "id": "emotion-vibe",
       "description": "Emotion-Erkennung (Vibe-Modell)",
-      "compose_service": "emotion-vibe"
+      "compose_service": "emotion-vibe",
+      "host": "b01"
     },
     {
       "id": "emotion-hate",
       "description": "Emotion-/Hate-Speech-Erkennung",
-      "compose_service": "emotion-hate"
+      "compose_service": "emotion-hate",
+      "host": "b01"
     },
     {
       "id": "debug-processor",
       "description": "Debug-Transkript-Processor / Aggregator",
-      "compose_service": "debug-processor"
+      "compose_service": "debug-processor",
+      "host": "b01"
     },
     {
       "id": "tts",
       "description": "Text-to-Speech",
-      "compose_service": "tts"
+      "compose_service": "tts",
+      "host": "b02"
     },
     {
       "id": "convert",
       "description": "Audio-/Format-Konvertierung",
-      "compose_service": "convert"
+      "compose_service": "convert",
+      "host": "b02"
     },
     {
       "id": "ocr",
       "description": "OCR (Texterkennung)",
-      "compose_service": "ocr"
+      "compose_service": "ocr",
+      "host": "b03"
     },
     {
       "id": "extraction",
       "description": "Text-Extraktion aus Dokumenten",
-      "compose_service": "extraction"
+      "compose_service": "extraction",
+      "host": "b02"
     },
     {
       "id": "ner",
       "description": "Named Entity Recognition",
-      "compose_service": "ner"
+      "compose_service": "ner",
+      "host": "b01"
     },
     {
       "id": "resume",
       "description": "Lebenslauf-Parsing",
-      "compose_service": "resume"
+      "compose_service": "resume",
+      "host": "b02"
     },
     {
       "id": "metadata",
       "description": "Metadaten-Extraktion",
-      "compose_service": "metadata"
+      "compose_service": "metadata",
+      "host": "b03"
     },
     {
       "id": "barcode",
       "description": "Barcode-Scanning (in prod skaliert auf 2 Replikate)",
-      "compose_service": "barcode"
+      "compose_service": "barcode",
+      "host": "b02"
     },
     {
       "id": "qrcode",
       "description": "QR-Code-Scanning",
-      "compose_service": "qrcode"
+      "compose_service": "qrcode",
+      "host": "b02"
     },
     {
       "id": "ocrpdf",
       "description": "Asynchrones PDF-OCR (Node.js, hinter nginx-LB auf Port 3000, in prod skaliert)",
-      "compose_service": "ocrpdf-lb"
+      "compose_service": "ocrpdf-lb",
+      "host": "b03"
     }
   ],
   "excluded": [

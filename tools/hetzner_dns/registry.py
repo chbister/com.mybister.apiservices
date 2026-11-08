@@ -17,24 +17,46 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 from .errors import ConfigError, ValidationError
-from .validators import validate_service_id
+from .validators import is_valid_label, validate_domain, validate_service_id
 
 DEFAULT_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "service_registry.json"
 
 
+def _validate_assigned_host(host: str) -> str:
+    """Validate an assigned target host: short label (``b03``) or FQDN."""
+    normalized = (host or "").strip().lower().rstrip(".")
+    if not normalized:
+        return ""
+    if "." in normalized:
+        validate_domain(normalized, "Ziel-Host")
+    elif not is_valid_label(normalized):
+        raise ValidationError(
+            f"Ungueltiger Ziel-Host '{host}' (erwartet z. B. 'b03' oder 'b03.mybister.com')"
+        )
+    return normalized
+
+
 @dataclass(frozen=True)
 class ServiceDefinition:
-    """A single deployable service."""
+    """A single deployable service.
+
+    ``host`` is the assigned target host of the service in the deployment
+    distribution (e.g. ``b03`` or ``b03.mybister.com``) - where the
+    service runs. The DNS tools derive the expected CNAME from it (and the
+    deployment automation can plan placements from it).
+    """
 
     id: str
     description: str = ""
     compose_service: str = ""
+    host: str = ""
 
     def to_dict(self) -> Dict[str, str]:
         return {
             "id": self.id,
             "description": self.description,
             "compose_service": self.compose_service,
+            "host": self.host,
         }
 
 
@@ -61,6 +83,11 @@ class ServiceRegistry:
                 raise ValidationError(f"Service-ID '{service.id}' muss kleingeschrieben sein")
             if service.id in seen:
                 raise ValidationError(f"Service-ID '{service.id}' kommt mehrfach in der Service-Registry vor")
+            if service.host and _validate_assigned_host(service.host) != service.host:
+                raise ValidationError(
+                    f"Ziel-Host '{service.host}' von '{service.id}' muss kleingeschrieben "
+                    "und ohne abschliessenden Punkt sein"
+                )
             seen.append(service.id)
         object.__setattr__(self, "_index", {s.id: s for s in self.services})
 
@@ -122,6 +149,7 @@ class ServiceRegistry:
                     id=str(entry["id"]),
                     description=str(entry.get("description", "")),
                     compose_service=str(entry.get("compose_service", "")),
+                    host=str(entry.get("host", "")),
                 )
             )
 
