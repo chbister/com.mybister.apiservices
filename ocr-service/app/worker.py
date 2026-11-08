@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Optional
 from PIL import Image
 
 # Import shared logic from app
+from .documents import detect_kind, join_page_texts, render_pdf_pages
 from .engines.tesseract import TesseractEngine
 from .engines.easy_ocr import EasyOCREngine
 from .engines.paddle_ocr import PaddleOCREngine
@@ -36,6 +37,7 @@ CALLBACK_AUTH_SECRET = os.getenv("CALLBACK_AUTH_SECRET")
 OCR_PROCESSING_TIMEOUT = int(os.getenv("OCR_PROCESSING_TIMEOUT", "120"))
 OCR_MAX_IMAGE_WIDTH = int(os.getenv("OCR_MAX_IMAGE_WIDTH", "1600"))
 OCR_MAX_IMAGE_HEIGHT = int(os.getenv("OCR_MAX_IMAGE_HEIGHT", "3000"))
+OCR_MAX_PAGES = int(os.getenv("OCR_MAX_PAGES", "10"))
 OCR_REQUEUE_STALE_PROCESSING_JOBS = os.getenv("OCR_REQUEUE_STALE_PROCESSING_JOBS", "true").lower() == "true"
 
 # Singleton engines in worker context
@@ -123,25 +125,44 @@ async def process_job(job_id: str, job_data: Dict[str, Any]):
         file_name = payload.get("file_name")
         file_url = payload.get("file_url")
         callback_url = payload.get("callback_url")
-        
-        # Load image
+        max_pages = int(payload.get("max_pages") or OCR_MAX_PAGES)
+        max_pages = max(1, min(max_pages, OCR_MAX_PAGES))
+
+        # Load document
         image_path = os.path.join(JOBS_DIR, f"{job_id}.img")
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found for job {job_id}")
-            
+
         with open(image_path, "rb") as f:
             contents = f.read()
-            
+
         start_time = time.time()
-        image = Image.open(io.BytesIO(contents))
-        
-        # 0. Resize Step
-        image = resize_image_if_needed(image)
-        
-        # 1. OCR Step
         engine = get_engine()
-        raw_text = engine.extract_text(image)
-        
+
+        # Der Dienst erkennt den Typ selbst (Magic Bytes), der Caller
+        # muss keinen Endpoint pro Typ wählen.
+        kind = detect_kind(contents)
+        page_texts: List[str] = []
+
+        if kind == "image":
+            image = resize_image_if_needed(Image.open(io.BytesIO(contents)))
+            page_texts = [engine.extract_text(image)]
+        elif kind == "pdf":
+            images, total_pages = render_pdf_pages(contents, max_pages)
+            truncated = total_pages > len(images)
+            if truncated:
+                logger.warning(
+                    "Job %s: PDF auf %d von %d Seiten gekürzt.",
+                    job_id, len(images), total_pages,
+                )
+            for image in images:
+                page_texts.append(engine.extract_text(resize_image_if_needed(image)))
+        else:
+            raise ValueError(
+                "Dateiformat wird nicht unterstützt (erwartet: PDF oder Bild)."
+            )
+
+        raw_text = join_page_texts(page_texts)
         processing_time = time.time() - start_time
         lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
 
@@ -155,9 +176,19 @@ async def process_job(job_id: str, job_data: Dict[str, Any]):
             "metadata": {
                 "ocr_engine": engine.__class__.__name__.replace("Engine", "").upper(),
                 "ocr_language": engine.lang,
-                "processing_time": round(processing_time, 4)
-            }
+                "processing_time": round(processing_time, 4),
+                "detected_type": kind,
+                "page_count": len(page_texts),
+            },
         }
+        if kind == "pdf":
+            result["pages"] = [
+                {"page": index + 1, "text": text}
+                for index, text in enumerate(page_texts)
+            ]
+            if truncated:
+                result["metadata"]["truncated"] = True
+                result["metadata"]["total_pages"] = total_pages
         
         update_job_status(job_id, "completed", result=result)
         logger.info("Job %s completed in %.2fs", job_id, processing_time)
