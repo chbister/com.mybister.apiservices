@@ -177,6 +177,14 @@ make up-dev
 make up-prod
 ```
 
+On the production hosts (`b01`/`b02`/`b03`) the deployment is
+**registry-driven**: the workflow *Deploy to self-hosted runners* starts
+exactly the services assigned to a host in `tools/service_registry.json`
+(`services` + `components`, `host` field; `tools/deploy_targets.py` computes
+the list). It runs automatically after image builds on `main` (all three
+hosts) and can be triggered manually per runner – optionally with `prune` to
+stop services that are no longer assigned to that runner.
+
 ### CareerGraph / Kickfriends
 ```bash
 make up-careergraph-prod   # or up-careergraph-dev, up-kickfriends-prod, ...
@@ -199,6 +207,9 @@ and normalized with `--force`). The repo ships a small CLI/library for that:
 export HETZNER_API_TOKEN="..."            # Hetzner Cloud API token (Read & Write)
 
 python -m tools.hetzner_dns list                    # show current CNAMEs
+python -m tools.hetzner_dns list --sort host        # … grouped by target host
+python -m tools.hetzner_dns sync                    # dry-run: reconcile to the registry hosts
+python -m tools.hetzner_dns sync --apply            # write the planned distribution
 python -m tools.hetzner_dns bulk --host b03         # dry-run: plan all services
 python -m tools.hetzner_dns bulk --host b03 --apply # create missing CNAMEs
 python -m tools.hetzner_dns set asr-small b02 --apply
@@ -207,7 +218,10 @@ python -m tools.hetzner_dns get asr-small
 
 `set` and `bulk` are dry-runs by default; diverging CNAMEs are only
 overwritten in bulk with an explicit `--force`. The central service list
-lives in `tools/service_registry.json` and is reused by the tool.
+lives in `tools/service_registry.json` and is reused by the tool; its
+`host` field assigns every service to its target host in the deployment
+distribution (b01/b02/b03) and drives both the `EXPECTED` column in `list`,
+the `sync` command and the registry-driven deployment (see below).
 Full documentation (config, exit codes, JSON output, Python API,
 GitHub Actions): **[docs/hetzner-dns.md](docs/hetzner-dns.md)**.
 

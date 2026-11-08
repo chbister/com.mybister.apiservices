@@ -81,6 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_list = subparsers.add_parser(
         "list", parents=[common], help="aktuellen Stand aller Service-CNAMEs anzeigen"
     )
+    p_list.add_argument(
+        "--sort",
+        choices=("service", "host"),
+        default="service",
+        help="Sortierung: 'service' (Name, Standard) oder 'host' (Ziel-Host, dann Name)",
+    )
     p_list.set_defaults(func=cmd_list)
 
     p_get = subparsers.add_parser(
@@ -108,6 +114,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="abweichende vorhandene CNAMEs ueberschreiben (standardmaessig: Konflikt, kein Write)",
     )
     p_bulk.set_defaults(func=cmd_bulk)
+
+    p_sync = subparsers.add_parser(
+        "sync",
+        parents=[common],
+        help="alle Service-CNAMEs auf ihre Registry-Zuordnung (host) abgleichen",
+    )
+    p_sync.add_argument("--apply", action="store_true", help="Aenderungen tatsaechlich schreiben")
+    p_sync.set_defaults(func=cmd_sync)
 
     p_services = subparsers.add_parser(
         "services", parents=[common], help="Service-Registry anzeigen (ohne API-Zugriff)"
@@ -173,6 +187,13 @@ def _build_manager() -> HetznerDNSManager:
 def cmd_list(args: argparse.Namespace) -> int:
     manager = _build_manager()
     records = manager.list_service_records()
+    if args.sort == "host":
+        # group by assigned target host, service name as secondary key
+        records = sorted(
+            records, key=lambda r: (r.expected_host or r.target or "\uffff", r.service_id)
+        )
+    else:
+        records = sorted(records, key=lambda r: r.service_id)
     if args.json:
         _json_dump([record.to_dict() for record in records])
         return EXIT_OK
@@ -280,6 +301,31 @@ def cmd_bulk(args: argparse.Namespace) -> int:
     return _exit_for_results(results)
 
 
+def cmd_sync(args: argparse.Namespace) -> int:
+    manager = _build_manager()
+    plan = manager.plan_sync()
+    results = manager.apply_bulk(plan) if args.apply else list(plan)
+
+    if args.json:
+        _json_dump(
+            {
+                "dry_run": not args.apply,
+                "summary": summarize(results),
+                "results": [change.to_dict() for change in results],
+            }
+        )
+        return _exit_for_results(results)
+
+    for change in results:
+        _print_change(change, width=max(len(c.fqdn) for c in results))
+    _print_summary(results)
+    if not args.apply:
+        print("\nDRY RUN - No DNS changes applied.")
+    else:
+        print("\nApplied.")
+    return _exit_for_results(results)
+
+
 def cmd_services(args: argparse.Namespace) -> int:
     registry_path = (os.environ.get("API_SERVICES_REGISTRY") or "").strip() or None
     registry = ServiceRegistry.load(Path(registry_path) if registry_path else None)
@@ -287,6 +333,7 @@ def cmd_services(args: argparse.Namespace) -> int:
         _json_dump(
             {
                 "services": [service.to_dict() for service in registry],
+                "components": [component.to_dict() for component in registry.components],
                 "excluded": [
                     {"id": excluded.id, "reason": excluded.reason} for excluded in registry.excluded
                 ],
@@ -295,12 +342,20 @@ def cmd_services(args: argparse.Namespace) -> int:
         return EXIT_OK
     service_domain = (os.environ.get("API_SERVICES_DOMAIN") or "api.mybister.com").strip()
     rows = [
-        [service.id, f"{service.id}.{service_domain}", service.description]
+        [service.id, f"{service.id}.{service_domain}", service.host or "-", service.description]
         for service in registry
     ]
-    _print_table(["SERVICE", "DNS NAME", "DESCRIPTION"], rows)
+    _print_table(["SERVICE", "DNS NAME", "HOST", "DESCRIPTION"], rows)
+    if registry.components:
+        print("\nKomponenten (deployierbar, kein eigener CNAME):")
+        component_rows = [
+            [component.id, component.compose_service or component.id, component.host or "-",
+             component.description]
+            for component in registry.components
+        ]
+        _print_table(["COMPONENT", "COMPOSE SERVICE", "HOST", "DESCRIPTION"], component_rows)
     if registry.excluded:
-        print("\nNicht verwaltet (kein CNAME):")
+        print("\nNicht verwaltet (kein DNS, kein Deployment):")
         for excluded in registry.excluded:
             print(f"  - {excluded.id}: {excluded.reason}")
     return EXIT_OK
