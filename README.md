@@ -27,7 +27,7 @@ Acts as the reverse proxy.
   (e.g. `https://sentiment.api.mybister.com/v1/sentiment`).
 - **Development**: Uses a project-specific Traefik instance on port 80 with path-based routing:
   `http://localhost/<service-id>/v1/...`
-- **Auth**: All production routers are protected by the `ForwardAuth` middleware (`API_KEY` header).
+- **Auth**: All production routers are protected by the `ForwardAuth` middleware (`API_KEY` header). The only exception is `GET /health` per service, which is publicly reachable without a key (own Traefik router without the auth middleware).
 
 ### 2. ASR (Speech-to-Text)
 Supports `tiny`, `small`, `medium`, and `large-v3` models.
