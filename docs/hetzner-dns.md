@@ -132,6 +132,7 @@ Bedarf `python` durch `.venv/bin/python` ersetzen.
 
 ```bash
 python -m tools.hetzner_dns list                # alle Service-CNAMEs anzeigen
+python -m tools.hetzner_dns list --sort host    # … nach Ziel-Host gruppiert
 python -m tools.hetzner_dns list --json         # … als JSON
 python -m tools.hetzner_dns get asr-small       # einen Service abfragen
 python -m tools.hetzner_dns get asr-small --json
@@ -153,6 +154,13 @@ Globale Flags je Unterbefehl: `--json` (maschinenlesbare Ausgabe),
 
 ```bash
 python -m tools.hetzner_dns list
+```
+
+Sortierung über `--sort`:
+
+```bash
+python -m tools.hetzner_dns list --sort service   # nach Service-Name (Standard)
+python -m tools.hetzner_dns list --sort host      # nach Ziel-Host gruppiert (b01, b02, b03), je Host nach Name
 ```
 
 Ausgabe (Auszug):

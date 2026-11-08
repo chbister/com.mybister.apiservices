@@ -81,6 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_list = subparsers.add_parser(
         "list", parents=[common], help="aktuellen Stand aller Service-CNAMEs anzeigen"
     )
+    p_list.add_argument(
+        "--sort",
+        choices=("service", "host"),
+        default="service",
+        help="Sortierung: 'service' (Name, Standard) oder 'host' (Ziel-Host, dann Name)",
+    )
     p_list.set_defaults(func=cmd_list)
 
     p_get = subparsers.add_parser(
@@ -181,6 +187,13 @@ def _build_manager() -> HetznerDNSManager:
 def cmd_list(args: argparse.Namespace) -> int:
     manager = _build_manager()
     records = manager.list_service_records()
+    if args.sort == "host":
+        # group by assigned target host, service name as secondary key
+        records = sorted(
+            records, key=lambda r: (r.expected_host or r.target or "\uffff", r.service_id)
+        )
+    else:
+        records = sorted(records, key=lambda r: r.service_id)
     if args.json:
         _json_dump([record.to_dict() for record in records])
         return EXIT_OK

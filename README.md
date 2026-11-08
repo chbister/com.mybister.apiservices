@@ -199,6 +199,7 @@ and normalized with `--force`). The repo ships a small CLI/library for that:
 export HETZNER_API_TOKEN="..."            # Hetzner Cloud API token (Read & Write)
 
 python -m tools.hetzner_dns list                    # show current CNAMEs
+python -m tools.hetzner_dns list --sort host        # … grouped by target host
 python -m tools.hetzner_dns sync                    # dry-run: reconcile to the registry hosts
 python -m tools.hetzner_dns sync --apply            # write the planned distribution
 python -m tools.hetzner_dns bulk --host b03         # dry-run: plan all services

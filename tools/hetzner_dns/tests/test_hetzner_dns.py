@@ -576,6 +576,32 @@ def test_cli_sync_applies_registry_hosts(capsys, monkeypatch):
     assert fake.cname_target("asr-small.api.mybister.com") == "b02.mybister.com."
 
 
+def test_cli_list_sorts_by_service_name_by_default(capsys, monkeypatch):
+    fake = FakeHetznerAPI()
+    services = (
+        ServiceDefinition(id="sentiment", description="Sentiment", host="b01"),
+        ServiceDefinition(id="asr-small", description="ASR small", host="b02"),
+    )
+    code, out, err = run_cli(["list"], fake, monkeypatch, capsys, registry=ServiceRegistry(services=services))
+    assert code == cli.EXIT_OK
+    assert out.index("asr-small") < out.index("sentiment")  # alphabetical
+
+
+def test_cli_list_sorts_by_target_host(capsys, monkeypatch):
+    fake = FakeHetznerAPI()
+    services = (
+        ServiceDefinition(id="sentiment", description="Sentiment", host="b03"),
+        ServiceDefinition(id="asr-small", description="ASR small", host="b01"),
+        ServiceDefinition(id="asr-tiny", description="ASR tiny", host="b01"),
+    )
+    code, out, err = run_cli(
+        ["list", "--sort", "host"], fake, monkeypatch, capsys, registry=ServiceRegistry(services=services)
+    )
+    assert code == cli.EXIT_OK
+    # grouped by target host (b01 first), service name as secondary key
+    assert out.index("asr-small") < out.index("asr-tiny") < out.index("sentiment")
+
+
 # --------------------------------------------------------------------------- #
 # 5: bulk dry run writes nothing
 # --------------------------------------------------------------------------- #
