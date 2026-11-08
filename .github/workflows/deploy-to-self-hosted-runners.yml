@@ -25,19 +25,34 @@ on:
         default: false
 
 jobs:
+  # The matrix context is not allowed in a job-level "if", so the target
+  # list is computed here: manual runs deploy to the selected runner only,
+  # automatic runs to all three.
+  plan:
+    name: Determine target runners
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: [self-hosted, com-mybister-apiservices]
+    outputs:
+      targets: ${{ steps.select.outputs.targets }}
+    steps:
+      - name: Select targets
+        id: select
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'targets=["${{ inputs.target }}"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'targets=["b01","b02","b03"]' >> "$GITHUB_OUTPUT"
+          fi
+
   deploy:
     name: Deploy to ${{ matrix.target }}
-    # Auto: every runner after a successful main build.
-    # Manual: only the selected runner.
-    if: >
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.target == matrix.target)
-
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
-        target: [b01, b02, b03]
-
+        target: ${{ fromJSON(needs.plan.outputs.targets) }}
     runs-on: [self-hosted, com-mybister-apiservices, "${{ matrix.target }}"]
 
     steps:
@@ -57,19 +72,21 @@ jobs:
       # components assigned to this runner, apikey-auth included ("*").
       - name: Start services of this host
         run: |
-          SERVICES="$(python3 tools/deploy_targets.py ${{ matrix.target }})"
-          echo "Starting on ${{ matrix.target }}: $SERVICES"
-          SCALE=""
-          case " $SERVICES " in *" barcode "*) SCALE="$SCALE --scale barcode=2" ;; esac
-          case " $SERVICES " in *" metadata "*) SCALE="$SCALE --scale metadata=2" ;; esac
-          docker compose --env-file /home/theuser/__dotenv__/env.apiservices pull $SERVICES
-          docker compose --env-file /home/theuser/__dotenv__/env.apiservices up -d $SCALE $SERVICES
+          SERVICES="$(python3 tools/deploy_targets.py "${{ matrix.target }}")"
+          read -r -a SVC <<< "$SERVICES"
+          echo "Starting on ${{ matrix.target }}: ${SVC[*]}"
+          SCALE=()
+          case " ${SVC[*]} " in *" barcode "*) SCALE+=(--scale barcode=2) ;; esac
+          case " ${SVC[*]} " in *" metadata "*) SCALE+=(--scale metadata=2) ;; esac
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices pull "${SVC[@]}"
+          docker compose --env-file /home/theuser/__dotenv__/env.apiservices up -d "${SCALE[@]}" "${SVC[@]}"
           docker image prune -f
 
       - name: Stop services not assigned to this host
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.prune }}
         run: |
-          OTHERS="$(python3 tools/deploy_targets.py ${{ matrix.target }} --others)"
-          if [ -n "$OTHERS" ]; then
-            docker compose --env-file /home/theuser/__dotenv__/env.apiservices rm -sf $OTHERS
+          OTHERS="$(python3 tools/deploy_targets.py "${{ matrix.target }}" --others)"
+          read -r -a REST <<< "$OTHERS"
+          if [ "${#REST[@]}" -gt 0 ]; then
+            docker compose --env-file /home/theuser/__dotenv__/env.apiservices rm -sf "${REST[@]}"
           fi
