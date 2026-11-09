@@ -53,6 +53,13 @@ EMOTION_VIBE_URL = os.getenv("EMOTION_VIBE_URL", "http://emotion-vibe:8000/v1/em
 EMOTION_STATE_URL = os.getenv("EMOTION_STATE_URL", "http://emotion-state:8000/v1/emotion")
 NER_URL = os.getenv("NER_URL", "http://ner:8000/v1/ner")
 
+# Optionaler Service-to-Service-Key: wenn die *_URLs auf die HTTPS-Endpunkte
+# zeigen, laufen die Aufrufe durch Traefik und brauchen den ForwardAuth-Key
+# im X-API-Key-Header (siehe README, Abschnitt Auth). Ohne API_KEY (Dev mit
+# internen Docker-DNS-Adressen) wird kein Header gesendet.
+API_KEY = os.getenv("API_KEY")
+CLIENT_HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
+
 class SegmentIn(BaseModel):
     start: float
     end: float
@@ -125,7 +132,7 @@ def health():
 async def process_asr_result(asr_result: AsrResultIn):
     logger.info("Processing ASR result (len=%d, segments=%d)", len(asr_result.text), len(asr_result.segments))
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers=CLIENT_HEADERS) as client:
         # 1. Analyze segments in batches (parallel)
         # This is the most important part and safe from the 20k char limit
         segment_tasks = [analyze_text(client, s.text) for s in asr_result.segments]

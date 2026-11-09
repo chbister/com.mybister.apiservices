@@ -1477,14 +1477,19 @@ services:
       - "8000"
     environment:
       <<: *common-env
-      # Interne Transportadressen (Docker-DNS, unveraenderte Verarbeitungskette).
-      # Fuer einen Umzug auf die HTTPS-Endpunkte hier die Werte tauschen (Audit R1).
-      SENTIMENT_URL: "http://sentiment:8000/v1/sentiment"
-      EMOTION_BASE_URL: "http://emotion:8000/v1/emotion"
-      EMOTION_NUANCE_URL: "http://emotion-nuance:8000/v1/emotion"
-      EMOTION_VIBE_URL: "http://emotion-vibe:8000/v1/emotion"
-      EMOTION_STATE_URL: "http://emotion-state:8000/v1/emotion"
-      NER_URL: "http://ner:8000/v1/ner"
+      # Transportadressen der Analyse-Kette (Audit R1): Der Dev-Default bleibt
+      # die interne Docker-DNS-Adresse. Prod-Hosts setzen die HTTPS-Endpunkte
+      # in ihrer Host-Env-Datei (env.apiservices), damit die Kette
+      # hostuebergreifend laeuft und die Services frei verteilt werden koennen.
+      # HTTPS-Aufrufe brauchen den ForwardAuth-Key: API_KEY wird gesetzt und
+      # der Service sendet ihn im X-API-Key-Header (Traefik apikey-auth).
+      SENTIMENT_URL: "${SENTIMENT_URL:-http://sentiment:8000/v1/sentiment}"
+      EMOTION_BASE_URL: "${EMOTION_BASE_URL:-http://emotion:8000/v1/emotion}"
+      EMOTION_NUANCE_URL: "${EMOTION_NUANCE_URL:-http://emotion-nuance:8000/v1/emotion}"
+      EMOTION_VIBE_URL: "${EMOTION_VIBE_URL:-http://emotion-vibe:8000/v1/emotion}"
+      EMOTION_STATE_URL: "${EMOTION_STATE_URL:-http://emotion-state:8000/v1/emotion}"
+      NER_URL: "${NER_URL:-http://ner:8000/v1/ner}"
+      API_KEY: "${API_KEY:-}"
     profiles: [ "prod" ]
     networks:
       edge:
