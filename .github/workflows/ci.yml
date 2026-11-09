@@ -25,6 +25,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest httpx qrcode pillow
 
+      - name: Free disk space
+        # ubuntu-latest hat nur ~14 GB SSD; der parallele Bau aller ML-Dev-Images
+        # (Torch/CUDA-Layer, pro Dev-Target dupliziert) laeuft sonst in
+        # "no space left on device". Diese Verzeichnisse brauchen die Tests nicht.
+        run: |
+          echo "== disk before =="; df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/az_* \
+            /usr/share/swift /usr/local/share/boost
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          sudo docker builder prune -af >/dev/null 2>&1 || true
+          echo "== disk after =="; df -h /
+
       - name: Build services
         run: |
           docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev build
