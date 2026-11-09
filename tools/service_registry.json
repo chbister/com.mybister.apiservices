@@ -77,7 +77,7 @@
       "id": "tts",
       "description": "Text-to-Speech",
       "compose_service": "tts",
-      "host": "b02"
+      "host": "b03"
     },
     {
       "id": "convert",
@@ -113,7 +113,7 @@
       "id": "metadata",
       "description": "Metadaten-Extraktion",
       "compose_service": "metadata",
-      "host": "b03"
+      "host": "b02"
     },
     {
       "id": "barcode",
