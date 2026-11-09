@@ -148,6 +148,12 @@
       "description": "Async-Worker zur ocr (gemeinsame Dateisystem-Queue)"
     },
     {
+      "id": "ocrpdf-app",
+      "compose_service": "ocrpdf",
+      "host": "b03",
+      "description": "Node-Replicas des asynchronen PDF-OCR hinter ocrpdf-lb (eigener Eintrag, damit Deploy das Image pusht und den Container neu erstellt)"
+    },
+    {
       "id": "callback-tester",
       "compose_service": "callback-tester",
       "host": "b02",

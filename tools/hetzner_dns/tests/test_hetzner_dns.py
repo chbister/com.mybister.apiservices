@@ -1111,7 +1111,7 @@ def test_registry_roles_services_components_excluded():
     excluded_ids = {excluded.id for excluded in registry.excluded}
 
     # components: deployable, but no DNS management
-    assert {"callback-tester", "ocr-worker", "apikey-auth"} == component_ids
+    assert {"callback-tester", "ocr-worker", "apikey-auth", "ocrpdf-app"} == component_ids
     # excluded: neither DNS nor deployment (documentation only)
     assert {"gateway", "food-recognition", "statusbar", "asr-vibevoice"} == excluded_ids
     # roles do not overlap

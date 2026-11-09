@@ -62,6 +62,8 @@ def test_real_registry_covers_all_hosts():
         assert "apikey-auth" in names
     b03 = deploy_targets.compose_services_for("b03", registry=registry)
     assert "ocr" in b03 and "ocr-worker" in b03 and "ocrpdf-lb" in b03
+    # ocrpdf-app: die Node-Replicas duessen beim Deploy nicht fehlen (Pull + Recreate)
+    assert "ocrpdf" in b03
     assert "sentiment" not in b03
 
 

@@ -293,6 +293,33 @@ if (process.env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
 
+// JSON-Error-Handler als letzter Handler: ohne diesen antwortet Express mit
+// der anonymen Default-HTML-Page ("Internal Server Error", 148 Bytes) – beim
+// n8n-HTTP-Request-Node kam dadurch ein unlesbarer HTML-Fehler zurueck.
+// Multer-Fehler (z.B. falscher Feldname, Datei zu gross) sind Client-Fehler
+// und werden als 400 mit Feldnamen beantwortet, alles andere als 500 JSON
+// mit Klartext (z.B. ENOENT auf /app/temp, wenn das Temp-Verzeichnis fehlt).
+// Wenn SENTRY_DSN gesetzt ist, hat der Sentry-Handler oben den Fehler schon
+// erfasst und hier nur noch die Antwort uebernommen.
+app.use((err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  if (err?.name === 'MulterError') {
+    const field = err.field ? ` (field "${err.field}")` : '';
+    logger.error(`Upload rejected: ${err.message}${field} [${err.code}]`);
+    return res.status(400).json({
+      error: `Upload rejected: ${err.message}${field}`,
+      code: err.code,
+    });
+  }
+  const status = Number(err?.status || err?.statusCode) || 500;
+  logger.error(`Unhandled error on ${req.method} ${req.path}:`, err);
+  return res.status(status).json({
+    error: err?.message || 'Internal Server Error',
+  });
+});
+
 app.listen(3000, async () => {
   logger.info('OCR microservice listening on port 3000');
   const hostname = os.hostname();

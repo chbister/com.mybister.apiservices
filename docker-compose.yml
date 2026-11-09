@@ -1675,7 +1675,11 @@ services:
       SENTRY_TRACES_SAMPLE_RATE: "${SENTRY_TRACES_SAMPLE_RATE:-0.1}"
       SENTRY_RELEASE: "${SENTRY_RELEASE:-}"
     volumes:
-      - ./ocrpdf-uploads:/app/temp
+      # Named Volume statt Bind-Mount ins Git-Workspace: der Deploy-Runner
+      # raeumt mit `git clean -ffdx` auf und loescht dadurch das untracked
+      # ./ocrpdf-uploads/ – der laufende Container haengt dann an einem
+      # toten Inode (readdir geht, open(O_CREAT) -> ENOENT -> HTML-500).
+      - ocrpdf-temp:/app/temp
     restart: unless-stopped
     profiles: [ "prod" ]
     networks:
@@ -1744,7 +1748,11 @@ services:
       SENTRY_TRACES_SAMPLE_RATE: "${SENTRY_TRACES_SAMPLE_RATE:-0.1}"
       SENTRY_RELEASE: "${SENTRY_RELEASE:-}"
     volumes:
-      - ./ocrpdf-uploads:/app/temp
+      # Named Volume statt Bind-Mount ins Git-Workspace: der Deploy-Runner
+      # raeumt mit `git clean -ffdx` auf und loescht dadurch das untracked
+      # ./ocrpdf-uploads/ – der laufende Container haengt dann an einem
+      # toten Inode (readdir geht, open(O_CREAT) -> ENOENT -> HTML-500).
+      - ocrpdf-temp:/app/temp
     restart: unless-stopped
     profiles: [ "dev" ]
     networks:
@@ -1761,6 +1769,7 @@ volumes:
   asr_jobs:
   ocr_jobs:
   callback_data:
+  ocrpdf-temp:
 networks:
   edge:
     external: true
