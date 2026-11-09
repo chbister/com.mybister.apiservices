@@ -120,7 +120,7 @@ Asynchronous PDF OCR (Tesseract/Poppler/Ghostscript) embedded from the standalon
 - **Health**: `GET https://ocrpdf.api.mybister.com/health` (`{"status":"ok","service":"ocrpdf",...}`, also covered by the `SERVICES` health lists in `tests/`).
 - **Prod topology**: `ocrpdf` replicas (default `OCRPDF_REPLICAS=2`) behind the nginx load balancer `ocrpdf-lb` (`least_conn`, `client_max_body_size 48M`); Traefik routes to the LB on port 3000.
 - **Dev**: single container `ocrpdf-dev` via path routing `http://localhost/ocrpdf/...`.
-- **Config**: `OCRPDF_REPLICAS`, `TEMP_MAX_AGE_HOURS`, `CALLBACK_TIMEOUT_MS`; job artifacts in `./ocrpdf-uploads` (mounted to `/app/temp`).
+- **Config**: `OCRPDF_REPLICAS`, `TEMP_MAX_AGE_HOURS`, `CALLBACK_TIMEOUT_MS`; job artifacts im Named Volume `ocrpdf-temp` (gemountet nach `/app/temp`) – bewusst kein Bind-Mount, weil der Deploy-Runner (`git clean -ffdx`) untracked Verzeichnisse im Workspace löscht.
 
 ### 7. Extraction & NER
 - **Extraction**: `POST https://extraction.api.mybister.com/v1/extract` – extracts structured data (names, phone numbers, …) from text/lines via pluggable extractor strategies (`mode`). Production host `extraction.api.mybister.com`.
