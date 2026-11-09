@@ -5,6 +5,7 @@ import logging
 import time
 import tempfile
 import shutil
+import urllib.request
 from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict, Any, List
@@ -24,6 +25,22 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# XTTS sample voices shipped in the Hugging Face repo coqui/XTTS-v2. The HF
+# snapshot (prefetch via `make prefetch-tts`) contains them already; the
+# repository download strategy only fetches the model files, so the fallback
+# warms them up separately (used e.g. by TTS_DEFAULT_VOICE=samples/de_sample.wav).
+XTTS_SAMPLE_FILES = [
+    "de_sample.wav",
+    "en_sample.wav",
+    "es_sample.wav",
+    "fr_sample.wav",
+    "ja-sample.wav",
+    "pt_sample.wav",
+    "tr_sample.wav",
+    "zh-cn-sample.wav",
+]
+XTTS_SAMPLES_BASE_URL = "https://huggingface.co/coqui/XTTS-v2/resolve/main/samples"
 
 # --- TTS Model Management ---
 
@@ -98,7 +115,9 @@ class TTSManager:
             if not voice_path:
                 return None
             actual_path = voice_path
-            if snapshot_path and not os.path.isabs(voice_path):
+            # Only join when the value looks like a relative path (contains a
+            # separator); bare speaker names must not be treated as file paths.
+            if snapshot_path and not os.path.isabs(voice_path) and os.path.sep in voice_path:
                 actual_path = os.path.join(snapshot_path, voice_path)
             
             # If it looks like a path (has separator or exists)
@@ -181,13 +200,19 @@ class TTSManager:
     def _resolve_snapshot(self) -> Optional[str]:
         """
         Automatically resolve the active Hugging Face snapshot in self.model_root.
+
+        Returns None when TTS_MODEL_ROOT is not set or does not exist (yet),
+        so load_model() can fall back to the repository download strategy
+        instead of failing hard (e.g. fresh host, hf_cache volume not prefetched).
         """
         if not self.model_root:
             return None
-            
+
         if not os.path.isdir(self.model_root):
-            logger.error(f"Model root is not a directory: {self.model_root}")
-            raise RuntimeError(f"Critical: TTS_MODEL_ROOT is not a directory: {self.model_root}")
+            logger.warning(
+                f"Model root is not a directory (model not downloaded yet?): {self.model_root}"
+            )
+            return None
 
         snapshots_dir = os.path.join(self.model_root, "snapshots")
         if not os.path.isdir(snapshots_dir):
@@ -230,13 +255,24 @@ class TTSManager:
 
         if self.model_root:
             snapshot_path = self._resolve_snapshot()
-            self._load_local_model(snapshot_path=snapshot_path)
-        else:
-            self._load_repository_model()
+            if snapshot_path:
+                self._load_local_model(snapshot_path=snapshot_path)
+                # Voices are resolved relative to the snapshot in _load_local_model
+                return
+            logger.warning(
+                f"TTS_MODEL_ROOT={self.model_root} is unusable; "
+                "falling back to repository download strategy."
+            )
 
-        # After loading model, validate default voices if not already done in _load_local_model
-        if not self.model_root:
-            self._validate_voices()
+        # Repository strategy: downloads the model into TTS_HOME (inside the
+        # mounted hf_cache volume) and validates the default voices afterwards.
+        self._load_repository_model()
+        # The repository download only contains the model files; warm up the
+        # sample voices too and resolve relative voice configs against the
+        # repository model directory.
+        model_dir = self._repository_model_dir(self.model_name)
+        self._ensure_sample_voices(model_dir)
+        self._validate_voices(snapshot_path=model_dir)
 
     def _load_local_model(self, snapshot_path: str):
         logger.info("Loading strategy: Local")
@@ -279,6 +315,72 @@ class TTSManager:
             logger.error(f"Failed to initialize model from local path: {e}")
             raise RuntimeError(f"Critical: Local XTTS model loading failure: {e}")
 
+    def _repository_model_dir(self, model_name: str) -> str:
+        """
+        Return the local directory used by the repository download strategy.
+
+        TTS 0.22.0 has no ModelManager.get_local_model_paths(), so the call
+        fails on the pinned version and we compute the path ourselves:
+        ModelManager downloads to <output_prefix>/<model_full_name> where
+        output_prefix is <tts_home>/tts (see TTS/utils/manage.py), and the TTS
+        API's internal ModelManager resolves to the same location as long as
+        TTS_HOME points at tts_home (set in _init_cache_and_retry_config).
+        """
+        try:
+            model_path, _, _ = self.model_manager.get_local_model_paths(model_name)
+            return os.path.dirname(model_path)
+        except Exception:
+            return os.path.join(self.tts_home, "tts", model_name.replace("/", "--"))
+
+    def _download_file(self, url: str, target: str, timeout: int = 60) -> None:
+        """
+        Download url to target atomically (writes <target>.part first, then renames).
+        """
+        tmp = target + ".part"
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp, open(tmp, "wb") as fh:
+                shutil.copyfileobj(resp, fh)
+            os.replace(tmp, target)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+
+    def _ensure_sample_voices(self, model_dir: str) -> None:
+        """
+        Download the XTTS sample voices (de/en/es/fr/ja/pt/tr/zh-cn) into
+        <model_dir>/samples/ so relative voice configs (e.g.
+        TTS_DEFAULT_VOICE=samples/de_sample.wav) resolve in the repository
+        download strategy as well - its layout has no samples/ directory.
+
+        Missing samples are never fatal: synthesis can still run with built-in
+        speaker names, so any download problem is logged as a warning only.
+        """
+        samples_dir = os.path.join(model_dir, "samples")
+        try:
+            os.makedirs(samples_dir, exist_ok=True)
+        except OSError as e:
+            logger.warning(f"Cannot create samples directory {samples_dir}: {e}")
+            return
+
+        for name in XTTS_SAMPLE_FILES:
+            target = os.path.join(samples_dir, name)
+            if os.path.isfile(target) and os.path.getsize(target) > 0:
+                continue
+            url = f"{XTTS_SAMPLES_BASE_URL}/{name}"
+            try:
+                self._download_file(url, target)
+                logger.info(f"Sample voice warmed up: {target}")
+            except Exception as e:
+                logger.warning(f"Could not warm up sample voice {url}: {e}")
+                if os.path.exists(target) and os.path.getsize(target) == 0:
+                    try:
+                        os.remove(target)
+                    except OSError:
+                        pass
+
     def _load_repository_model(self):
         """Load TTS model - always loads XTTS v2 for consistent behavior."""
         logger.info("Loading strategy: Repository")
@@ -288,17 +390,11 @@ class TTSManager:
         # Always load XTTS v2 to ensure voice cloning capability
         # The synthesize() method will handle VITS vs XTTS mode based on hardware
         selected_model_name = self.model_name
-        # Discover the model path dynamically using ModelManager
-        try:
-            model_path, config_path, model_item = self.model_manager.get_local_model_paths(selected_model_name)
-            model_dir = os.path.dirname(model_path)
-            logger.info(f"Resolved model directory: {model_dir}")
-        except Exception as e:
-            # If ModelManager cannot resolve it, it might not be downloaded yet
-            logger.info(f"Model not found in cache: {e}")
-            model_dir = os.path.join(self.tts_home, selected_model_name.replace("/", "--"))
-            model_path = os.path.join(model_dir, "model.pth")
-            config_path = os.path.join(model_dir, "config.json")
+        # Discover the model path dynamically (may not be downloaded yet)
+        model_dir = self._repository_model_dir(selected_model_name)
+        model_path = os.path.join(model_dir, "model.pth")
+        config_path = os.path.join(model_dir, "config.json")
+        logger.info(f"Resolved model directory: {model_dir}")
 
         retries = 0
         current_delay = self.initial_retry_delay
@@ -321,11 +417,9 @@ class TTSManager:
                 self.model = TTS(model_name=selected_model_name).to(self.device)
                 
                 # Update paths after loading/downloading in case they changed
-                try:
-                    model_path, config_path, _ = self.model_manager.get_local_model_paths(selected_model_name)
-                    model_dir = os.path.dirname(model_path)
-                except:
-                    pass
+                model_dir = self._repository_model_dir(selected_model_name)
+                model_path = os.path.join(model_dir, "model.pth")
+                config_path = os.path.join(model_dir, "config.json")
 
                 # Double check after loading/downloading (XTTS v2 only)
                 if not self._is_cache_valid(model_dir):
@@ -366,13 +460,7 @@ class TTSManager:
                     current_delay *= self.retry_backoff
                     # Clean up again before retry if it seems like a corruption issue
                     if diagnostic in ["Corrupted cache/download", "Network interruption"]:
-                         # Resolve directory again if possible for cleanup
-                         try:
-                             m_path, _, _ = self.model_manager.get_local_model_paths(self.model_name)
-                             m_dir = os.path.dirname(m_path)
-                             self._cleanup_cache(m_dir)
-                         except:
-                             self._cleanup_cache(model_dir)
+                        self._cleanup_cache(model_dir)
                 else:
                     logger.error("Max retries exceeded. Failing fast.")
                     raise RuntimeError(f"Critical: TTS model loading failure after {retries} retries: {e} (Diagnostic: {diagnostic})")

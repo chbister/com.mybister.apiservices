@@ -9,6 +9,7 @@ SERVICES = [
     "tts",
     "ocr",
     "extraction",
+    "resume",
     "asr-tiny",
     "sentiment",
     "emotion-nuance",
