@@ -177,11 +177,11 @@ Simulates a webhook receiver for testing asynchronous ASR callbacks.
 - If using OrbStack, ensure the Docker command is available in your shell.
 
 ### Profiles
-| Profile | Services |
-|---|---|
-| `prod` / `dev` | Main suite (ASR, diarization, analysis, processor, TTS, OCR, conversion, …) |
-| `careergraph-prod` / `careergraph-dev` | CareerGraph subset: `ocr`, `ocr-worker`, `resume` |
-| `kickfriends-prod` / `kickfriends-dev` | Kickfriends subset |
+| Profile                                | Services                                                                    |
+|----------------------------------------|-----------------------------------------------------------------------------|
+| `prod` / `dev`                         | Main suite (ASR, diarization, analysis, processor, TTS, OCR, conversion, …) |
+| `careergraph-prod` / `careergraph-dev` | CareerGraph subset: `ocr`, `ocr-worker`, `resume`                           |
+| `kickfriends-prod` / `kickfriends-dev` | Kickfriends subset                                                          |
 
 ### Development Mode
 ```bash
