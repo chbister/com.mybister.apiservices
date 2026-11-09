@@ -1,4 +1,4 @@
-.PHONY: help up-prod up-dev down-prod down-dev up-careergraph-prod up-careergraph-dev down-careergraph-prod down-careergraph-dev local-asr local-diarization local-debug-processor
+.PHONY: help up-prod up-dev down-prod down-dev up-careergraph-prod up-careergraph-dev down-careergraph-prod down-careergraph-dev local-asr local-diarization local-debug-processor prefetch-tts
 
 PROFILE ?= dev
 ACTION ?= up
@@ -23,6 +23,7 @@ help:
 	@echo "  down-kickfriends-dev  - Stop services in kickfriends development profile"
 	@echo "  down-careergraph-prod - Stop CareerGraph production services"
 	@echo "  down-careergraph-dev  - Stop CareerGraph development services"
+	@echo "  prefetch-tts      - Download XTTS v2 into the hf_cache volume (TTS_MODEL_ROOT), PROFILE=prod|dev"
 	@echo ""
 	@echo "Or use: make compose PROFILE=<prod|dev|kickfriends-prod|kickfriends-dev|careergraph-prod|careergraph-dev> ACTION=<up|down>"
 
@@ -99,3 +100,21 @@ up-careergraph-dev:
 
 down-careergraph-dev:
 	$(MAKE) compose PROFILE=careergraph-dev ACTION=down
+
+# ---------------------------------------------------------------------------
+# XTTS-v2-Modell in die hf_cache-Volume laden (entspricht TTS_MODEL_ROOT).
+# Einmalig pro Host nötig, wenn die Volume neu ist – sonst startet der
+# TTS-Service ohne Modell (/health: ready:false, /v1/tts: 503) und lädt das
+# Modell erst beim nächsten Start über die Repository-Strategie selbst nach.
+#   make prefetch-tts PROFILE=prod   (Deployment-Host, ghcr-Image)
+#   make prefetch-tts PROFILE=dev    (lokal; tts-dev-Image muss gebaut sein)
+# Lädt ca. 2 GB von huggingface.co (coqui/XTTS-v2, öffentlich, kein Token).
+# ---------------------------------------------------------------------------
+prefetch-tts:
+	@if [ "$(PROFILE)" != "prod" ] && [ "$(PROFILE)" != "dev" ]; then \
+		echo "Error: Invalid profile. Use PROFILE=prod or PROFILE=dev."; \
+		exit 1; \
+	fi
+	@SERVICE="tts"; if [ "$(PROFILE)" = "dev" ]; then SERVICE="tts-dev"; fi; \
+	docker compose --profile $(PROFILE) run --rm -T --no-deps $$SERVICE \
+		python -c "from huggingface_hub import snapshot_download; print(snapshot_download('coqui/XTTS-v2'))"

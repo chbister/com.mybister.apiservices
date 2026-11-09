@@ -91,6 +91,22 @@ Combines ASR results with all analysis services.
 - **Models**: Coqui **XTTS v2** (multilingual, voice cloning) with GPU detection;
   automatic CPU fallback to German Tacotron2 (`tts_models/de/thorsten/tacotron2-DDS_German`).
 - Configurable voices via `TTS_DEFAULT_VOICE` / `TTS_DEFAULT_MALE_VOICE`, model root via `TTS_MODEL_ROOT`.
+- **Model-Prefetch**: `TTS_MODEL_ROOT` zeigt auf den Hugging-Face-Cache
+  (`/root/.cache/huggingface/hub/models--coqui--XTTS-v2`) in der geteilten
+  `hf_cache`-Volume. Auf einem **neuen Host** einmalig laden:
+  `make prefetch-tts PROFILE=prod` (bzw. `PROFILE=dev` lokal). Das ist nötig,
+  weil weder Deploy-Pipeline noch TTS-Bibliothek diesen HF-Pfad anlegen.
+- **Fallback**: Fehlt `TTS_MODEL_ROOT` beim Start (z. B. neue Volume), lädt der
+  Service das Modell automatisch über die Repository-Strategie nach
+  (`TTS_HOME`, ebenfalls in der `hf_cache`-Volume) und startet trotzdem –
+  `logger.warning` statt Abbruch. Erst wenn beide Strategien fehlschlagen,
+  bleibt der Service nicht ready (`/health` → `ready:false`, `/v1/tts` → `503`).
+  - **Sample-Stimmen (Warm-up)**: Das Repository-Download-Layout enthält kein
+    `samples/`-Verzeichnis. Der Fallback lädt deshalb zusätzlich alle 8
+    Sprach-Samples (`de, en, es, fr, ja, pt, tr, zh-cn`, ca. 0,3–0,4 MB je Datei)
+    aus `coqui/XTTS-v2` nach `<modell_dir>/samples/` und löst `TTS_DEFAULT_VOICE`
+    dagegen auf. Fehlschläge sind nicht fatal (Rückfall auf Speaker-Namen);
+    der normale Prefetch bringt die Samples bereits mit.
 
 ### 6. OCR (CareerGraph profile)
 Async document OCR with a dedicated worker container (`ocr-worker`).
