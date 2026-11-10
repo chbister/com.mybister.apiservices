@@ -119,6 +119,7 @@ services:
     platform: linux/amd64
     # "base": the minimal profile every host gets via the deploy workflow
     profiles: [ "base", "prod", "kickfriends-prod", "careergraph-prod" ]
+    restart: unless-stopped
     environment:
       API_KEY: ${API_KEY}
     labels:
@@ -1491,6 +1492,7 @@ services:
       NER_URL: "${NER_URL:-http://ner:8000/v1/ner}"
       API_KEY: "${API_KEY:-}"
     profiles: [ "prod" ]
+    restart: unless-stopped
     networks:
       edge:
       app:
@@ -1555,6 +1557,7 @@ services:
     environment:
       <<: *common-env
     profiles: [ "prod" ]
+    restart: unless-stopped
     networks:
       edge:
       app:
