@@ -60,13 +60,15 @@ class TTSManager:
 
     @property
     def active_model_name(self) -> str:
-        """Return the model name currently in use based on hardware availability."""
+        """Return the name of the model that is actually loaded."""
         if not self.model:
             return None
-        # If GPU available or forced CPU mode, use XTTS v2; otherwise VITS fallback
-        if self.has_gpu or os.getenv("TTS_FORCE_CPU") == "true":
-            return self.model_name
-        return self.cpu_model_name
+        # Model loading always uses XTTS v2 (see _load_repository_model), so report
+        # the loaded model instead of guessing from hardware availability.
+        loaded = getattr(self.model, "model_name", None)
+        if isinstance(loaded, str) and loaded:
+            return loaded
+        return self.model_name
 
     def _select_model_for_loading(self) -> str:
         """Select appropriate model name based on available hardware."""
@@ -465,6 +467,49 @@ class TTSManager:
                     logger.error("Max retries exceeded. Failing fast.")
                     raise RuntimeError(f"Critical: TTS model loading failure after {retries} retries: {e} (Diagnostic: {diagnostic})")
 
+    def _builtin_speaker_names(self) -> List[str]:
+        """
+        Return the built-in speaker names of the loaded model.
+
+        TTS 0.22.0 ships a broken ``TTS.speakers`` property for XTTS v2
+        (``speaker_names`` calls ``.keys()`` on a ``dict_keys`` object and raises
+        AttributeError), so the names are read from the speaker manager first
+        and only then via the public property.
+        """
+        if not self.model:
+            return []
+        try:
+            names = list(self.model.synthesizer.tts_model.speaker_manager.name_to_id)
+            if names:
+                return [n for n in names if isinstance(n, str)]
+        except Exception:
+            pass
+        try:
+            names = list(getattr(self.model, "speakers", None) or [])
+        except Exception:
+            return []
+        return [n for n in names if isinstance(n, str)]
+
+    def _fallback_speaker(self) -> Optional[str]:
+        """
+        Pick a built-in speaker name for the loaded model.
+
+        XTTS v2 is multi-speaker: a synthesis call without ``speaker`` and without
+        ``speaker_wav`` raises ValueError. This is used whenever no usable voice
+        could be resolved (e.g. voice cloning disabled in VITS/CPU mode).
+        Returns None for single-speaker models, which must be called without a
+        speaker argument at all.
+        """
+        if not self.model or not getattr(self.model, "is_multi_speaker", False):
+            return None
+        names = self._builtin_speaker_names()
+        if not names:
+            return None
+        for preferred in (self.default_female_voice, self.default_male_voice, self.default_voice):
+            if preferred and preferred in names:
+                return preferred
+        return names[0]
+
     def synthesize(
         self,
         text: str,
@@ -489,6 +534,13 @@ class TTSManager:
             # For VITS-mode requests, don't pass speaker_wav as voice cloning won't work well on CPU anyway
             effective_speaker_wav = None if is_vits_mode else speaker_wav
 
+            # speaker_wav may also hold a built-in speaker name instead of a file
+            # path (gender defaults are names like "de_female_01") - only real
+            # files are valid for voice cloning.
+            if effective_speaker_wav and not os.path.isfile(effective_speaker_wav):
+                speaker = speaker or effective_speaker_wav
+                effective_speaker_wav = None
+
             if effective_speaker_wav:
                 self.model.tts_to_file(
                     text=text,
@@ -504,11 +556,27 @@ class TTSManager:
                     file_path=tmp_wav_path
                 )
             else:
-                # Fallback if neither provided, though validation should prevent this
+                # Neither a reference file nor a speaker name is available (e.g.
+                # voice cloning disabled in CPU mode). The loaded model is
+                # multi-speaker, so calling it without any speaker raises
+                # "Model is multi-speaker but no `speaker` is provided."
+                fallback_speaker = self._fallback_speaker()
+                if fallback_speaker:
+                    logger.warning(
+                        f"No speaker and no usable speaker_wav available "
+                        f"(vits_mode={is_vits_mode}), falling back to built-in speaker: {fallback_speaker}"
+                    )
+                elif getattr(self.model, "is_multi_speaker", False):
+                    logger.error(
+                        "No speaker available, model is multi-speaker and no built-in "
+                        "speakers could be resolved - synthesis will fail"
+                    )
+                kwargs = {"speaker": fallback_speaker} if fallback_speaker else {}
                 self.model.tts_to_file(
                     text=text,
                     language=language,
-                    file_path=tmp_wav_path
+                    file_path=tmp_wav_path,
+                    **kwargs
                 )
 
             # Convert to MP3 if requested
@@ -641,8 +709,6 @@ async def generate_speech(
     else:
         raise HTTPException(status_code=400, detail="Unsupported document format. Only PDF and SSML are supported.")
 
-    text = "Das ist das Haus vom Nikolaus!"
-
     if not text:
         raise HTTPException(status_code=400, detail="Document content is empty")
 
@@ -673,6 +739,14 @@ async def generate_speech(
             elif gender == Gender.FEMALE:
                 voice_source = VoiceSource.DEFAULT_FEMALE
                 speaker_wav_path = tts_manager.default_female_voice
+
+        # A default voice may be a reference file (voice cloning) or a built-in
+        # speaker name such as "de_female_01". Only real files may be passed as
+        # speaker_wav; everything else is a speaker name.
+        if speaker_wav_path and not os.path.isfile(speaker_wav_path):
+            speaker_name = speaker_wav_path
+            speaker_wav_path = None
+
         logger.info(f"Voice info: {voice_source}, {speaker_name}")
         # Speech generation
         synthesis_start = time.time()
@@ -693,6 +767,9 @@ async def generate_speech(
                 language=language.split('-')[0],  # Use 2-letter code for XTTS v2
                 output_format=outputFormat
             )
+        except HTTPException:
+            # e.g. 503 "model not loaded" - must not be rewritten to a 500
+            raise
         except Exception as e:
             logger.error(f"Synthesis failure for request {request_id}: {e}")
             raise HTTPException(status_code=500, detail="Internal synthesis failure")
