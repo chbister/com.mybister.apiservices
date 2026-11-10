@@ -26,15 +26,17 @@ Existing variables:
 ### 2. New TTSManager Properties and Methods
 
 #### `active_model_name` property
-Returns the currently active model name based on hardware availability:
+Returns the name of the model that is actually loaded (always XTTS v2, since the
+loader never switches models):
 ```python
 @property
 def active_model_name(self) -> str:
     if not self.model:
         return None
-    if self.has_gpu or os.getenv("TTS_FORCE_CPU") == "true":
-        return self.model_name  # XTTS v2
-    return self.cpu_model_name  # VITS fallback (deprecated, always returns XTTS)
+    loaded = getattr(self.model, "model_name", None)
+    if isinstance(loaded, str) and loaded:
+        return loaded
+    return self.model_name
 ```
 
 #### `_select_model_for_loading()` method **(DEPRECATED)**
@@ -42,17 +44,25 @@ This method was originally intended to select different models based on hardware
 
 ### 3. Updated Model Loading Logic (`_load_repository_model()`)
 
-The method now:
-1. Selects the appropriate model based on hardware availability
-2. For VITS models, skips XTTS-specific cache validation and loads directly
-3. For XTTS v2, uses existing retry logic with cache validation
+The method now always loads **XTTS v2** (both strategies, local snapshot and
+repository download). `_select_model_for_loading()` is no longer used for
+loading - the model choice is purely a synthesis-time concern.
 
 ### 4. Updated Synthesis Logic (`synthesize()`)
 
 The synthesis method now:
 1. **Always uses XTTS v2** (since that's what gets loaded)
 2. **Disables voice cloning on CPU-only machines**: `speaker_wav` parameter is ignored when no GPU detected
-3. **Uses fixed speaker names on CPU**: Falls back to default male/female speakers based on gender selection
+3. **Uses fixed speaker names on CPU**: `speaker_wav` values that are not real
+   file paths (e.g. `TTS_DEFAULT_VOICE=de_female_01`) are passed as `speaker`
+   instead
+4. **Never calls the model without a speaker**: XTTS v2 is multi-speaker, so a
+   call with neither `speaker` nor `speaker_wav` raises
+   `ValueError: Model is multi-speaker but no 'speaker' is provided.` (was
+   reported as HTTP 500 for every CPU request, GlitchTip issues 15/16/17).
+   If no usable voice is available, `_fallback_speaker()` picks a built-in
+   speaker from `model.speakers` and logs a warning. Single-speaker models are
+   still called without a speaker argument.
 
 This ensures consistent behavior regardless of cached models and prevents errors from trying to use XTTS v2-specific parameters with VITS models.
 
@@ -63,7 +73,7 @@ Returns additional information:
 {
   "status": "ok",
   "service": "tts-service",
-  "model": "xtts_v2" | "tacotron2-DDS_German" | null,
+  "model": "tts_models/multilingual/multi-dataset/xtts_v2" | null,
   "device": "cuda" | "cpu",
   "has_gpu": true | false | null,
   "hostname": "...",
@@ -90,7 +100,7 @@ curl http://localhost:5000/health
 ```bash
 docker run --gpus=all "" -e TTS_FORCE_CPU=false -p 5001:5000 tts-service
 curl http://localhost:5001/health
-# Expected: has_gpu=false, model=tacotron2-DDS_German
+# Expected: has_gpu=false, model=tts_models/multilingual/multi-dataset/xtts_v2
 ```
 
 ### Force CPU Mode (for testing)
@@ -98,7 +108,7 @@ curl http://localhost:5001/health
 ```bash
 docker run -e TTS_FORCE_CPU=true -p 5002:5000 tts-service
 curl http://localhost:5002/health
-# Expected: has_gpu=false, model=tacotron2-DDS_German
+# Expected: has_gpu=false, model=tts_models/multilingual/multi-dataset/xtts_v2
 ```
 
 ## Testing Checklist
