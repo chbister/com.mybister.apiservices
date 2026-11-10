@@ -142,25 +142,42 @@ jobs:
       - name: Fetch images (changed from GHCR ci tag, unchanged from latest)
         env:
           IMAGES: ${{ needs.plan.outputs.images }}
+          SHA: ${{ github.sha }}
         shell: bash
         run: |
-          TAG="ci-${{ github.sha }}"
-          echo "$IMAGES" | jq -c '.[]' | while read -r it; do
+          # Collect "ref<TAB>local-name" pairs, then pull them in parallel:
+          # the ML images are multi-GB, serial pulls dominated the job (~15 min).
+          echo "$IMAGES" | jq -c '.[]' > images.jsonl
+          : > pulls.tsv
+          while read -r it; do
             name=$(jq -r '.name' <<<"$it")
             ghcr=$(jq -r '.ghcr' <<<"$it")
             changed=$(jq -r '.changed' <<<"$it")
-            primary=$(jq -r '.primary_service' <<<"$it")
-            if [ "$changed" = "true" ]; then ref="$ghcr:$TAG"; else ref="$ghcr:latest"; fi
-            echo "-- $name <- $ref"
-            if docker pull "$ref"; then
+            if [ "$changed" = "true" ]; then ref="$ghcr:ci-$SHA"; else ref="$ghcr:latest"; fi
+            printf '%s\t%s\n' "$ref" "$name" >> pulls.tsv
+          done < images.jsonl
+          cut -f1 pulls.tsv | xargs -P 4 -I{} docker pull {} || true
+
+          # Tag everything to the dev names the compose file expects; build
+          # locally as a fallback if a pull failed.
+          status=0
+          while IFS=$'\t' read -r ref name; do
+            if docker image inspect "$ref" >/dev/null 2>&1; then
               docker tag "$ref" "$name:local"
             else
-              echo "pull failed, building $primary locally"
-              docker compose -f docker-compose.yml -f docker-compose.ci.yml \
-                --profile dev build "$primary"
+              echo "pull failed for $ref - building locally"
+              primary=$(jq -r --arg n "$name" 'select(.name == $n) | .primary_service' images.jsonl || echo "")
+              if [ -z "$primary" ]; then
+                echo "no primary service found for $name"
+                status=1
+              elif ! docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+                  --profile dev build "$primary"; then
+                status=1
+              fi
             fi
-          done
+          done < pulls.tsv
           docker images
+          exit $status
 
       - name: Start services
         run: |
