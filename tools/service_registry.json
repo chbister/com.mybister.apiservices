@@ -35,7 +35,7 @@
       "id": "sentiment",
       "description": "Sentiment-Analyse",
       "compose_service": "sentiment",
-      "host": "b01"
+      "host": "b03"
     },
     {
       "id": "emotion",
@@ -95,13 +95,13 @@
       "id": "extraction",
       "description": "Text-Extraktion aus Dokumenten",
       "compose_service": "extraction",
-      "host": "b02"
+      "host": "b03"
     },
     {
       "id": "ner",
       "description": "Named Entity Recognition",
       "compose_service": "ner",
-      "host": "b01"
+      "host": "b03"
     },
     {
       "id": "resume",

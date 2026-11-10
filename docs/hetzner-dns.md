@@ -170,7 +170,7 @@ SERVICE       DNS NAME                         TARGET             TTL  EXPECTED 
 ------------  -------------------------------  -----------------  ---  ----------------  --------
 asr-tiny      asr-tiny.api.mybister.com        b03.mybister.com.  60   b03.mybister.com. PRESENT
 asr-small     asr-small.api.mybister.com       -                  -    b03.mybister.com. MISSING
-sentiment     sentiment.api.mybister.com       b01.mybister.com.  60   b01.mybister.com. PRESENT
+sentiment     sentiment.api.mybister.com       b01.mybister.com.  60   b03.mybister.com. DIFFERS
 ocr           ocr.api.mybister.com             b03.mybister.com   60   b03.mybister.com. DIFFERS
 ```
 
@@ -357,7 +357,7 @@ Alle 22 eigenständig deploybaren Services aus `tools/service_registry.json`
 | `asr-medium` | `asr-medium.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `asr-large` | `asr-large.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `diarization` | `diarization.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `sentiment` | `sentiment.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `sentiment` | `sentiment.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `emotion` | `emotion.api.mybister.com` | CNAME | `b01.mybister.com.` |
 | `emotion-nuance` | `emotion-nuance.api.mybister.com` | CNAME | `b01.mybister.com.` |
 | `emotion-state` | `emotion-state.api.mybister.com` | CNAME | `b01.mybister.com.` |
@@ -368,8 +368,8 @@ Alle 22 eigenständig deploybaren Services aus `tools/service_registry.json`
 | `convert` | `convert.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `ocr` | `ocr.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `ocrpdf` | `ocrpdf.api.mybister.com` | CNAME | `b03.mybister.com.` |
-| `extraction` | `extraction.api.mybister.com` | CNAME | `b02.mybister.com.` |
-| `ner` | `ner.api.mybister.com` | CNAME | `b01.mybister.com.` |
+| `extraction` | `extraction.api.mybister.com` | CNAME | `b03.mybister.com.` |
+| `ner` | `ner.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `resume` | `resume.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `metadata` | `metadata.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `barcode` | `barcode.api.mybister.com` | CNAME | `b02.mybister.com.` |
@@ -577,9 +577,9 @@ Registry die Single Source of Truth für DNS **und** Verteilung:
 
 | Host | Services |
 |---|---|
-| `b01` | `sentiment`, `ner`, `emotion`, `emotion-nuance`, `emotion-state`, `emotion-vibe`, `emotion-hate`, `debug-processor` |
-| `b02` | `metadata`, `convert`, `extraction`, `resume`, `barcode`, `qrcode` |
-| `b03` | `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `ocr`, `ocrpdf`, `tts` |
+| `b01` | `emotion`, `emotion-nuance`, `emotion-state`, `emotion-vibe`, `emotion-hate`, `debug-processor` |
+| `b02` | `metadata`, `convert`, `resume`, `barcode`, `qrcode` |
+| `b03` | `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `sentiment`, `ner`, `extraction`, `ocr`, `ocrpdf`, `tts` |
 
 Das Feld treibt die `EXPECTED`-Spalte in `list`/`get` (Fallback:
 `DEFAULT_DOCKER_HOST`) und `sync` (Abschnitt 5.5) an. **Und es steuert das
