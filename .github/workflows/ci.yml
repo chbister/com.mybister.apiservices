@@ -5,14 +5,121 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
-  test:
-    name: "Integration Tests"
+  plan:
+    name: Plan image builds
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      images: ${{ steps.plan.outputs.images }}
+      has_builds: ${{ steps.plan.outputs.has_builds }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          json: true
+          escape_json: false
+
+      - name: Plan builds (changed images vs. GHCR pulls)
+        id: plan
+        shell: bash
+        run: |
+          docker compose --profile dev --profile build --profile builder \
+            config --format json > compose.json
+          python3 tools/ci_plan.py \
+            --compose-json compose.json \
+            --changed-files-json '${{ steps.changed-files.outputs.all_changed_files }}' \
+            --event '${{ github.event_name }}' \
+            --root "$PWD"
+
+  build:
+    # One job per changed image on its own runner: builds are decoupled and
+    # run in parallel; unchanged images are pulled from GHCR in the test job.
+    name: Build ${{ matrix.name }}
+    needs: plan
+    if: ${{ needs.plan.outputs.has_builds == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        if: matrix.target == ''
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.rel_context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ matrix.ghcr }}:ci-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Build and push image (with target)
+        if: matrix.target != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.rel_context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ matrix.ghcr }}:ci-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  test:
+    name: "Integration Tests"
+    needs: [plan, build]
+    if: >-
+      always() &&
+      needs.plan.result == 'success' &&
+      (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Free disk space
+        # ubuntu-latest has only ~14 GB SSD; the ML images (torch/CUDA layers)
+        # need most of it. These toolchains are not used by the tests.
+        run: |
+          echo "== disk before =="; df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+            /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          echo "== disk after =="; df -h /
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,9 +132,35 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest httpx qrcode pillow
 
-      - name: Build services
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch images (changed from GHCR ci tag, unchanged from latest)
+        env:
+          IMAGES: ${{ needs.plan.outputs.images }}
+        shell: bash
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml --profile dev build
+          TAG="ci-${{ github.sha }}"
+          echo "$IMAGES" | jq -c '.[]' | while read -r it; do
+            name=$(jq -r '.name' <<<"$it")
+            ghcr=$(jq -r '.ghcr' <<<"$it")
+            changed=$(jq -r '.changed' <<<"$it")
+            primary=$(jq -r '.primary_service' <<<"$it")
+            if [ "$changed" = "true" ]; then ref="$ghcr:$TAG"; else ref="$ghcr:latest"; fi
+            echo "-- $name <- $ref"
+            if docker pull "$ref"; then
+              docker tag "$ref" "$name:local"
+            else
+              echo "pull failed, building $primary locally"
+              docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+                --profile dev build "$primary"
+            fi
+          done
+          docker images
 
       - name: Start services
         run: |
