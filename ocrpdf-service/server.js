@@ -44,6 +44,14 @@ app.use(express.json());
 
 const TEMP_MAX_AGE_MS = Number(process.env.TEMP_MAX_AGE_HOURS ?? 24) * 60 * 60 * 1000;
 const CALLBACK_TIMEOUT_MS = Number(process.env.CALLBACK_TIMEOUT_MS ?? 30000);
+// Callback-Auth gegen n8n-Webhooks mit Header Auth (X-API-Key). Ohne Wert
+// werden die Callbacks unauthentifiziert verschickt (und von n8n mit 403
+// abgewiesen, wenn der Webhook Auth verlangt).
+const CALLBACK_API_KEY = process.env.CALLBACK_API_KEY;
+
+function getCallbackAuthHeaders() {
+  return CALLBACK_API_KEY ? { 'X-API-Key': CALLBACK_API_KEY } : {};
+}
 
 function isValidCallbackUrl(value) {
   if (!value || typeof value !== 'string') return false;
@@ -123,7 +131,10 @@ async function postSuccessCallback(callbackUrl, { id, originalName, text, optimi
     knownLength: imgStat.size,
   });
 
-  const headers = await getFormHeadersWithLength(form);
+  const headers = {
+    ...getCallbackAuthHeaders(),
+    ...(await getFormHeadersWithLength(form)),
+  };
   const response = await axios.post(callbackUrl, form, {
     headers,
     timeout: CALLBACK_TIMEOUT_MS,
@@ -135,6 +146,7 @@ async function postSuccessCallback(callbackUrl, { id, originalName, text, optimi
 
 async function postErrorCallback(callbackUrl, payload) {
   await axios.post(callbackUrl, payload, {
+    headers: getCallbackAuthHeaders(),
     timeout: CALLBACK_TIMEOUT_MS,
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
@@ -322,6 +334,9 @@ app.use((err, req, res, next) => {
 
 app.listen(3000, async () => {
   logger.info('OCR microservice listening on port 3000');
+  if (!CALLBACK_API_KEY) {
+    logger.warn('CALLBACK_API_KEY is not set — callbacks are sent without X-API-Key header');
+  }
   const hostname = os.hostname();
   logger.info(`OCR microservice running on ${hostname}`);
   if (process.env.SENTRY_DSN && process.env.SENTRY_SEND_TEST_EVENT) {
