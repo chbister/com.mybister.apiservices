@@ -54,7 +54,7 @@ sondern als eigener Layer direkt danach installiert:
 
 ```dockerfile
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir "sentry-sdk[fastapi]>=2.0"
+RUN pip install --no-cache-dir "sentry-sdk[fastapi]>=2.26,<3"
 ```
 
 Damit bleibt der große requirements-Layer (torch, whisper, pyannote …)

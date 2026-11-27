@@ -26,4 +26,4 @@ mlx-whisper
 
 # GlitchTip/Sentry-SDK (in Docker als eigener Layer installiert, s. Dockerfiles);
 # lokal nötig, damit der init-Block in app/main.py greifen kann.
-sentry-sdk[fastapi]>=2.0
+sentry-sdk[fastapi]>=2.0,<3
