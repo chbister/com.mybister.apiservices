@@ -1062,8 +1062,11 @@ def _compose_routers_with_host() -> set:
 def test_registry_matches_docker_compose_services():
     registry = ServiceRegistry.load()
     routers = _compose_routers_with_host()
-    # callback-tester is a webhook test helper and intentionally excluded.
-    managed_routers = routers - {"callback-tester"}
+    # callback-tester is a webhook test helper (manual CNAME, component role);
+    # registry.excluded documents services that are not DNS-managed yet
+    # (e.g. still in development).
+    unmanaged = {"callback-tester"} | {excluded.id for excluded in registry.excluded}
+    managed_routers = routers - unmanaged
 
     unknown_in_registry = set(registry.ids) - managed_routers
     missing_in_registry = managed_routers - set(registry.ids)
@@ -1072,7 +1075,7 @@ def test_registry_matches_docker_compose_services():
         "Compose-Services ohne Registry-Eintrag (neuen Service in "
         f"tools/service_registry.json ergaenzen): {sorted(missing_in_registry)}"
     )
-    assert routers - set(registry.ids) == {"callback-tester"}
+    assert routers - set(registry.ids) == routers & unmanaged
 
 
 def test_prod_routers_use_dedicated_service_hosts():
@@ -1083,6 +1086,8 @@ def test_prod_routers_use_dedicated_service_hosts():
     routers stay path-based and carry no Host rule at all.
     """
     compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    registry = ServiceRegistry.load()
+    excluded_ids = {excluded.id for excluded in registry.excluded}
     pattern = re.compile(r"traefik\.http\.routers\.([A-Za-z0-9_-]+)\.rule=Host\(`([^`]+)`\)")
     checked = 0
     for line in compose.splitlines():
@@ -1094,6 +1099,9 @@ def test_prod_routers_use_dedicated_service_hosts():
         name, host = match.groups()
         # public <service>-health routers share their service's hostname
         service_id = name[: -len("-health")] if name.endswith("-health") else name
+        if service_id in excluded_ids:
+            # noch in Entwicklung: Hostnamen sind nicht final (keine DNS-Verwaltung)
+            continue
         assert host == f"{service_id}.api.mybister.com", (
             f"Router {name} nutzt noch den Host {host!r} statt "
             f"{service_id}.api.mybister.com"
@@ -1113,7 +1121,17 @@ def test_registry_roles_services_components_excluded():
     # components: deployable, but no DNS management
     assert {"callback-tester", "ocr-worker", "apikey-auth", "ocrpdf-app"} == component_ids
     # excluded: neither DNS nor deployment (documentation only)
-    assert {"gateway", "food-recognition", "statusbar", "asr-vibevoice"} == excluded_ids
+    assert {
+        "gateway",
+        "food-recognition",
+        "statusbar",
+        "asr-vibevoice",
+        # in Entwicklung - noch keine Registry-/DNS-Verwaltung
+        "llm",
+        "browseric",
+        "browseric-comments",
+        "browseric-ui",
+    } == excluded_ids
     # roles do not overlap
     assert not (service_ids & component_ids)
     assert not (service_ids & excluded_ids)

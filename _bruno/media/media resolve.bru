@@ -1,0 +1,49 @@
+meta {
+  name: media resolve
+  type: http
+  seq: 2
+}
+
+docs {
+  Loest eine Medien-Seiten-URL (z.B. YouTube-Link) auf und laedt die beste Audiospur.
+  Antwort: 202 {job_id, status_url, file_url} - job_id wird in jobIdMedia gespeichert.
+  Danach 'media status' ausfuehren; die file_url des Ergebnisses direkt an asr weiterreichen.
+  Optional: ttl_hours (1-72, Default 24) und callback_url (wie bei asr).
+}
+
+post {
+  url: {{baseUrlMedia}}/v1/media/resolve
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "url": "https://www.youtube.com/watch?v=mgySd6zkKR0",
+    "ttl_hours": 24
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body && body.job_id) {
+    bru.setEnvVar("jobIdMedia", body.job_id);
+  }
+}
+
+tests {
+  test("HTTP 202", function() {
+    expect(res.getStatus()).to.equal(202);
+  });
+  test("Antwort enthaelt die erwarteten Felder", function() {
+    const body = res.getBody();
+    expect(body).to.have.property("job_id");
+    expect(body).to.have.property("status_url");
+    expect(body).to.have.property("file_url");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

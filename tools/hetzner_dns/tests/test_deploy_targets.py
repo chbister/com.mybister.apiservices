@@ -64,7 +64,8 @@ def test_real_registry_covers_all_hosts():
     assert "ocr" in b03 and "ocr-worker" in b03 and "ocrpdf-lb" in b03
     # ocrpdf-app: die Node-Replicas duessen beim Deploy nicht fehlen (Pull + Recreate)
     assert "ocrpdf" in b03
-    assert "sentiment" not in b03
+    # sentiment: bewusst auf b03 (ASR-/Audio-Host), nicht im b01-Analyse-Cluster
+    assert "sentiment" in b03
 
 
 def test_cli_output_and_unknown_host(capsys):

@@ -60,6 +60,16 @@ Supports `tiny`, `small`, `medium`, and `large-v3` models.
 - **Response headers**: `X-Original-Name`, `X-Duration-Seconds`, `X-Sample-Rate`, `X-Channels`.
 - ffmpeg lives only inside this container – the host never needs it.
 
+### 2d. Media Resolve (link → hosted audio URL)
+Turns a media page URL (e.g. YouTube link) into a directly usable audio URL – end users never need
+yt-dlp or any toolchain locally. Runs yt-dlp server-side and hosts the audio with a TTL.
+- **Resolve**: `POST https://media.api.mybister.com/v1/media/resolve` with `{"url": "<page-url>", "ttl_hours": 24, "callback_url": "..."}` → **202** `{job_id, status_url, file_url}`.
+- **Status**: `GET https://media.api.mybister.com/v1/media/status/{job_id}` – `status` (`processing|completed|failed`), `result` (with `file_url`, `title`, `duration`, `expires_at`) or `error`.
+- **File**: `GET https://media.api.mybister.com/v1/media/files/{job_id}` – the hosted audio (this URL can be passed directly as `file_url` to ASR, diarization, …).
+- **TTL**: files are auto-deleted after `MEDIA_TTL_HOURS` (default 24, max 72). `MEDIA_MAX_BYTES` caps downloads (default 500 MB).
+- **Typical flow**: `resolve` → take `result.file_url` → `POST https://asr-<model>.api.mybister.com/v1/asr` with `file_url=<that URL>`.
+- **Dev caveat**: the returned URL is built from `MEDIA_PUBLIC_BASE_URL` (dev: `http://localhost/media`). From inside a container use `http://media-link:8000/v1/media/files/{job_id}` instead.
+
 ### 3. Analysis Services (Multilingual)
 All emotion services share the same code base; the model is selected via `EMOTION_MODEL_ID`.
 - **Sentiment**: `POST https://sentiment.api.mybister.com/v1/sentiment` – multilingual sentiment scoring.
@@ -156,6 +166,23 @@ Simulates a webhook receiver for testing asynchronous ASR callbacks.
     - Captures any incoming POST request.
     - Stores the payload and headers as JSON files.
 - **List Received**: `GET https://callback-tester.api.mybister.com/list`
+
+### 14. ICS Generator (Node.js, `ics-service`)
+Generates iCalendar (`.ics`) files as base64 – event schedules and yearly birthday calendars
+(migrated from the standalone `~/icsgenerator` instance).
+- **Events**: `POST https://ics.api.mybister.com/v1/generate-ics` with
+  `{"timezone": "Europe/Berlin", "events": [{"start": "2026-05-01T10:00:00", "end": "2026-05-01T11:00:00", "summary": "…", "location": "…", "description": "…"}]}`.
+  Optional: `prodId`, `name`, `calName`; per event optional `uid`.
+- **Birthdays**: `POST https://ics.api.mybister.com/v1/generate-birthday-cal` with
+  `{"birthdays": [{"name": "Anna", "date": "1990-07-04"}]}` – all-day events with
+  `RRULE:FREQ=YEARLY`.
+- **Response**: `{"fileName": "schedule.ics", "mimeType": "text/calendar", "data": "<base64>"}`.
+  Invalid payloads return JSON `400` (`{"error": "…"}`).
+- **Health**: `GET https://ics.api.mybister.com/health` (free of the API key, like every service).
+- **Prod**: host `ics.api.mybister.com` on **b02** (`tools/service_registry.json`), Traefik
+  ForwardAuth on all routes except `/health`.
+- **Dev**: path routing `http://localhost/ics/...` (container `ics-dev`, image `ics:local`).
+- **Config**: `ICS_MAX_EVENTS`, `ICS_MAX_BIRTHDAYS` (both default 2000, payload caps).
 
 ---
 

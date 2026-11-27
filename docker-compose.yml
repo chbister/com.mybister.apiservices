@@ -538,6 +538,86 @@ services:
     networks:
       - edge
 
+  media:
+    image: ghcr.io/chbister/media:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.media.rule=Host(`media.api.mybister.com`)"
+      - "traefik.http.routers.media.entrypoints=websecure"
+      - "traefik.http.routers.media.tls=true"
+      - "traefik.http.routers.media.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.media.middlewares=apikey-auth"
+      - "traefik.http.routers.media-health.rule=Host(`media.api.mybister.com`) && Path(`/health`)"
+      - "traefik.http.routers.media-health.entrypoints=websecure"
+      - "traefik.http.routers.media-health.tls=true"
+      - "traefik.http.routers.media-health.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.media-health.priority=100"
+      - "traefik.http.routers.media-health.service=media"
+      - "traefik.http.services.media.loadbalancer.server.port=8000"
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      MEDIA_PUBLIC_BASE_URL: "https://media.api.mybister.com"
+      MEDIA_TTL_HOURS: "24"
+      MEDIA_JOBS_DIR: "/srv/jobs"
+      MEDIA_FILES_DIR: "/srv/files"
+      UVICORN_HOST: "0.0.0.0"
+      UVICORN_PORT: "8000"
+      UVICORN_WORKERS: "2"
+    volumes:
+      - media_files:/srv/files
+      - media_jobs:/srv/jobs
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - media-link
+
+  media-image-builder:
+    build:
+      context: ./media-service
+    image: ghcr.io/chbister/media:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service media-image-builder is only for building the image"]
+    restart: "no"
+
+  media-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.media-dev.rule=PathPrefix(`/media`)"
+      - "traefik.http.routers.media-dev.entrypoints=web"
+      - "traefik.http.routers.media-dev.middlewares=media-strip"
+      - "traefik.http.middlewares.media-strip.stripprefix.prefixes=/media"
+      - "traefik.http.services.media-dev.loadbalancer.server.port=8000"
+    build:
+      context: ./media-service
+    image: media:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      MEDIA_PUBLIC_BASE_URL: "http://localhost/media"
+      MEDIA_TTL_HOURS: "24"
+      MEDIA_JOBS_DIR: "/srv/jobs"
+      MEDIA_FILES_DIR: "/srv/files"
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
+    volumes:
+      - ./media-service/app:/srv/app:rw
+      - media_files:/srv/files
+      - media_jobs:/srv/jobs
+    profiles: [ "dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - media-link
+
   # gateway:
   #   image: nginx:alpine
   #   expose:
@@ -1772,6 +1852,81 @@ services:
           - ocrpdf-link
 
 
+  # ---------------------------------------------------------------------------
+  # ics – ICS-Kalendergenerator (Node.js, ics-service):
+  #   POST /v1/generate-ics        Termine/Zeitplan als .ics (base64)
+  #   POST /v1/generate-birthday-cal Jahresgeburtstage als .ics (base64)
+  #   GET  /health                 ohne API-Key (eigener Traefik-Router)
+  # Prod: Host-Router mit TLS + ForwardAuth; Dev: Pfad-Routing unter /ics.
+  # ---------------------------------------------------------------------------
+  ics:
+    image: ghcr.io/chbister/ics:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.ics.rule=Host(`ics.api.mybister.com`)"
+      - "traefik.http.routers.ics.entrypoints=websecure"
+      - "traefik.http.routers.ics.tls=true"
+      - "traefik.http.routers.ics.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ics.middlewares=apikey-auth"
+      - "traefik.http.routers.ics-health.rule=Host(`ics.api.mybister.com`) && Path(`/health`)"
+      - "traefik.http.routers.ics-health.entrypoints=websecure"
+      - "traefik.http.routers.ics-health.tls=true"
+      - "traefik.http.routers.ics-health.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ics-health.priority=100"
+      - "traefik.http.routers.ics-health.service=ics"
+      - "traefik.http.services.ics.loadbalancer.server.port=3000"
+    expose:
+      - "3000"
+    environment:
+      <<: *common-env
+      NODE_ENV: "production"
+      MAX_EVENTS: "${ICS_MAX_EVENTS:-2000}"
+      MAX_BIRTHDAYS: "${ICS_MAX_BIRTHDAYS:-2000}"
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - ics-link
+
+  ics-image-builder:
+    build:
+      context: ./ics-service
+    image: ghcr.io/chbister/ics:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service ics-image-builder is only for building the image"]
+    restart: "no"
+
+  ics-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.ics-dev.rule=PathPrefix(`/ics`)"
+      - "traefik.http.routers.ics-dev.entrypoints=web"
+      - "traefik.http.routers.ics-dev.middlewares=ics-strip"
+      - "traefik.http.middlewares.ics-strip.stripprefix.prefixes=/ics"
+      - "traefik.http.services.ics-dev.loadbalancer.server.port=3000"
+    build:
+      context: ./ics-service
+    image: ics:local
+    expose:
+      - "3000"
+    environment:
+      <<: *common-env
+      NODE_ENV: "production"
+      MAX_EVENTS: "${ICS_MAX_EVENTS:-2000}"
+      MAX_BIRTHDAYS: "${ICS_MAX_BIRTHDAYS:-2000}"
+    restart: unless-stopped
+    profiles: [ "dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - ics-link
+
+
 volumes:
   hf_cache:
   paddle_cache:
@@ -1780,6 +1935,8 @@ volumes:
   ocr_jobs:
   callback_data:
   ocrpdf-temp:
+  media_files:
+  media_jobs:
 networks:
   edge:
     external: true

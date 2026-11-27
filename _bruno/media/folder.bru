@@ -1,0 +1,13 @@
+meta {
+  name: media
+  type: folder
+  seq: 1
+}
+
+docs {
+  Media-Resolve: Web-Medien-Link (z.B. YouTube) -> gehostete Audio-URL.
+  Dev: http://localhost/media/...   Prod: https://media.api.mybister.com/... (Header X-API-Key)
+  Fluss: POST /v1/media/resolve -> 202 + job_id (wird in jobIdMedia gespeichert) -> status -> file.
+  Die file_url des Ergebnisses laesst sich direkt als file_url an asr-/diarization weiterreichen.
+  Dateien werden nach MEDIA_TTL_HOURS (Default 24h) automatisch geloescht.
+}

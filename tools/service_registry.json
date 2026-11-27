@@ -86,6 +86,12 @@
       "host": "b02"
     },
     {
+      "id": "media",
+      "description": "Media-Resolve (Link -> gehostete Audio-URL, yt-dlp)",
+      "compose_service": "media",
+      "host": "b02"
+    },
+    {
       "id": "ocr",
       "description": "OCR (Texterkennung)",
       "compose_service": "ocr",
@@ -132,6 +138,12 @@
       "description": "Asynchrones PDF-OCR (Node.js, hinter nginx-LB auf Port 3000, in prod skaliert)",
       "compose_service": "ocrpdf-lb",
       "host": "b03"
+    },
+    {
+      "id": "ics",
+      "description": "ICS-Kalendergenerator (Termine & Geburtstage, Node.js)",
+      "compose_service": "ics",
+      "host": "b02"
     }
   ],
   "components": [
@@ -176,6 +188,22 @@
     {
       "id": "asr-vibevoice",
       "reason": "asr-service-vibevoice nicht in docker-compose.yml dieses Repositories hinterlegt"
+    },
+    {
+      "id": "llm",
+      "reason": "in Entwicklung - noch keine Registry-/DNS-Verwaltung"
+    },
+    {
+      "id": "browseric",
+      "reason": "in Entwicklung - noch keine Registry-/DNS-Verwaltung"
+    },
+    {
+      "id": "browseric-comments",
+      "reason": "in Entwicklung - noch keine Registry-/DNS-Verwaltung"
+    },
+    {
+      "id": "browseric-ui",
+      "reason": "in Entwicklung - noch keine Registry-/DNS-Verwaltung"
     }
   ]
 }

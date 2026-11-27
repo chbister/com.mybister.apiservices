@@ -22,7 +22,9 @@ SERVICES = [
     "debug-processor",
     "barcode",
     "callback-tester",
-    "ocrpdf"
+    "ocrpdf",
+    "ics",
+    "media"
 ]
 
 @pytest.fixture(scope="session", autouse=True)

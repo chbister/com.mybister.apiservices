@@ -1,0 +1,61 @@
+meta {
+  name: generate ics
+  type: http
+  seq: 2
+}
+
+docs {
+  Generiert einen Termin-/Zeitplan-Kalender.
+  JSON-Body {timezone? = Europe/Berlin, events[] = {start, end, summary,
+  description?, location?, uid?}, prodId?, name?, calName?} ->
+  200 {fileName, mimeType, data(base64)}. Ungueltige Payloads antworten 400 {error}.
+}
+
+post {
+  url: {{baseUrlIcs}}/v1/generate-ics
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "timezone": "Europe/Berlin",
+    "events": [
+      {
+        "start": "2026-05-01T10:00:00",
+        "end": "2026-05-01T11:00:00",
+        "summary": "Team Meeting",
+        "location": "Berlin",
+        "description": "Quartalsplanung"
+      }
+    ]
+  }
+}
+
+tests {
+  test("HTTP 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("Antwort enthaelt die erwarteten Felder", function() {
+    const body = res.getBody();
+    expect(body).to.have.property("fileName");
+    expect(body).to.have.property("mimeType");
+    expect(body).to.have.property("data");
+    expect(body.mimeType).to.equal("text/calendar");
+  });
+  test("base64-Daten enthalten eine Kalender-Datei", function() {
+    const body = res.getBody();
+    const ics = globalThis.atob ? globalThis.atob(body.data) : Buffer.from(body.data, "base64").toString("binary");
+    expect(ics.indexOf("BEGIN:VCALENDAR")).to.be.at.least(0);
+    expect(ics.indexOf("BEGIN:VEVENT")).to.be.at.least(0);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

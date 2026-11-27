@@ -1,0 +1,37 @@
+meta {
+  name: media status
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrlMedia}}/v1/media/status/{{jobIdMedia}}
+  body: none
+  auth: inherit
+}
+
+vars:pre-request {
+  jobIdMedia: 01M8EDTJJQGQY2FBXHTJ4Y40FA-1541da453b81
+}
+
+tests {
+  test("HTTP 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("Antwort enthaelt die erwarteten Felder", function() {
+    const body = res.getBody();
+    expect(body).to.have.property("job_id");
+    expect(body).to.have.property("status");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  Job-Status. Voraussetzung: zuvor 'media resolve' ausgefuehrt (fuellt jobIdMedia).
+  Bei status=completed enthaelt die Antwort result.file_url (fuer asr & co.),
+  bei status=failed das error-Feld. Ohne jobIdMedia kommt ein 404.
+}

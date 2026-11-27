@@ -1,0 +1,33 @@
+meta {
+  name: health
+  type: http
+  seq: 1
+}
+
+docs {
+  Gesundheitscheck (in Prod OHNE API-Key erreichbar, eigener Traefik-Router).
+}
+
+get {
+  url: {{baseUrlMedia}}/health
+  body: none
+  auth: inherit
+}
+
+tests {
+  test("HTTP 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("Antwort enthaelt die erwarteten Felder", function() {
+    const body = res.getBody();
+    expect(body).to.have.property("status");
+  });
+  test("status ist ok", function() {
+    expect(res.getBody().status).to.equal("ok");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
