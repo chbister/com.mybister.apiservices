@@ -205,6 +205,42 @@ def audio_duration_sec(file_path: str) -> Optional[float]:
     return None
 
 
+NON_MEDIA_CONTENT_TYPES = {
+    "application/json",
+    "application/javascript",
+    "application/xml",
+    "application/xhtml+xml",
+}
+
+MARKUP_SNIFF_PREFIXES = (b"<!doctype", b"<html", b"<head", b"<body", b"<?xml", b"<rss", b"<svg")
+
+
+def is_non_media_content_type(content_type: Optional[str]) -> bool:
+    """True, wenn der Content-Type eindeutig kein Audio/Video ist (z.B. HTML-Seiten)."""
+    if not content_type:
+        return False
+    ct = content_type.split(";")[0].strip().lower()
+    return ct.startswith("text/") or ct in NON_MEDIA_CONTENT_TYPES
+
+
+def ensure_media_file(file_path: str, file_url: str) -> None:
+    """Bricht mit klarer Meldung ab, wenn heruntergeladene Bytes kein Audio/Video sind.
+
+    Webseiten-/Player-URLs liefern HTML statt Medien. Das erkennen wir hier
+    frueh, statt dass der Decoder spaeter 'Invalid data found' wirft.
+    """
+    try:
+        with open(file_path, "rb") as f:
+            head = f.read(1024).lstrip().lower()
+    except OSError:
+        return
+    if head.startswith(MARKUP_SNIFF_PREFIXES):
+        raise ValueError(
+            f"file_url must point to an audio/video file, but '{file_url}' "
+            "returned HTML/text content instead of media"
+        )
+
+
 def transcribe_worker_gpu(
     file_path: str,
     model_size: str,
@@ -474,6 +510,15 @@ async def asr_gpu(
                         detail=f"File check failed at URL: {file_url} (Error: {e})",
                     )
 
+            check_type = check_res.headers.get("content-type")
+            if is_non_media_content_type(check_type):
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file_url must point to an audio/video file, but '{file_url}' returned content-type '{check_type}'",
+                )
+
             job_id = f"{ulid.ULID()}-{socket.gethostname()}"
             logger.info("GPU: switching to async mode for file_url job %s", job_id)
             save_job_result(job_id, {}, "processing")
@@ -489,6 +534,8 @@ async def asr_gpu(
                             with open(temp_path, "wb") as tmp:
                                 async for chunk in response.aiter_bytes():
                                     tmp.write(chunk)
+
+                    ensure_media_file(temp_path, file_url)
 
                     await run_async_job_gpu(
                         job_id, temp_path, model_size, lang_val, timestamps,
@@ -766,6 +813,15 @@ async def asr(
                         os.remove(temp_path)
                     raise HTTPException(status_code=status_code, detail=f"File check failed at URL: {file_url} (Error: {e})")
 
+            check_type = check_res.headers.get("content-type")
+            if is_non_media_content_type(check_type):
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"file_url must point to an audio/video file, but '{file_url}' returned content-type '{check_type}'",
+                )
+
             # Switch to async for file_url to avoid timeout
             job_id = f"{ulid.ULID()}-{socket.gethostname()}"
             logger.info("Switching to async mode for file_url job %s", job_id)
@@ -781,7 +837,9 @@ async def asr(
                             with open(temp_path, 'wb') as tmp:
                                 async for chunk in response.aiter_bytes():
                                     tmp.write(chunk)
-                    
+
+                    ensure_media_file(temp_path, file_url)
+
                     await run_async_job(job_id, temp_path, lang_val, vad_filter, timestamps, callback_url, 
                                        None, file_url)
                 except Exception as e:
@@ -850,6 +908,10 @@ async def asr(
             
         return result
 
+    except HTTPException:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        raise
     except Exception as e:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -862,11 +924,15 @@ async def get_status(job_id: str):
     data = get_job_data(job_id)
     if not data:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {
+    response = {
         "job_id": data["job_id"],
         "status": data["status"],
         "updated_at": data["updated_at"]
     }
+    result = data.get("result")
+    if data["status"] == "failed" and isinstance(result, dict) and result.get("error"):
+        response["error"] = result["error"]
+    return response
 
 
 @app.get("/v1/asr/download/{job_id}")
