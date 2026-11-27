@@ -538,6 +538,86 @@ services:
     networks:
       - edge
 
+  media:
+    image: ghcr.io/chbister/media:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.media.rule=Host(`media.api.mybister.com`)"
+      - "traefik.http.routers.media.entrypoints=websecure"
+      - "traefik.http.routers.media.tls=true"
+      - "traefik.http.routers.media.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.media.middlewares=apikey-auth"
+      - "traefik.http.routers.media-health.rule=Host(`media.api.mybister.com`) && Path(`/health`)"
+      - "traefik.http.routers.media-health.entrypoints=websecure"
+      - "traefik.http.routers.media-health.tls=true"
+      - "traefik.http.routers.media-health.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.media-health.priority=100"
+      - "traefik.http.routers.media-health.service=media"
+      - "traefik.http.services.media.loadbalancer.server.port=8000"
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      MEDIA_PUBLIC_BASE_URL: "https://media.api.mybister.com"
+      MEDIA_TTL_HOURS: "24"
+      MEDIA_JOBS_DIR: "/srv/jobs"
+      MEDIA_FILES_DIR: "/srv/files"
+      UVICORN_HOST: "0.0.0.0"
+      UVICORN_PORT: "8000"
+      UVICORN_WORKERS: "2"
+    volumes:
+      - media_files:/srv/files
+      - media_jobs:/srv/jobs
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - media-link
+
+  media-image-builder:
+    build:
+      context: ./media-service
+    image: ghcr.io/chbister/media:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service media-image-builder is only for building the image"]
+    restart: "no"
+
+  media-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.media-dev.rule=PathPrefix(`/media`)"
+      - "traefik.http.routers.media-dev.entrypoints=web"
+      - "traefik.http.routers.media-dev.middlewares=media-strip"
+      - "traefik.http.middlewares.media-strip.stripprefix.prefixes=/media"
+      - "traefik.http.services.media-dev.loadbalancer.server.port=8000"
+    build:
+      context: ./media-service
+    image: media:local
+    expose:
+      - "8000"
+    environment:
+      <<: *common-env
+      MEDIA_PUBLIC_BASE_URL: "http://localhost/media"
+      MEDIA_TTL_HOURS: "24"
+      MEDIA_JOBS_DIR: "/srv/jobs"
+      MEDIA_FILES_DIR: "/srv/files"
+      UVICORN_RELOAD: "1"
+      UVICORN_LOG_LEVEL: "debug"
+    volumes:
+      - ./media-service/app:/srv/app:rw
+      - media_files:/srv/files
+      - media_jobs:/srv/jobs
+    profiles: [ "dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - media-link
+
   # gateway:
   #   image: nginx:alpine
   #   expose:
@@ -1780,6 +1860,8 @@ volumes:
   ocr_jobs:
   callback_data:
   ocrpdf-temp:
+  media_files:
+  media_jobs:
 networks:
   edge:
     external: true

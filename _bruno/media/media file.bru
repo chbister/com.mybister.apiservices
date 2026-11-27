@@ -1,0 +1,32 @@
+meta {
+  name: media file
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrlMedia}}/v1/media/files/{{jobIdMedia}}
+  body: none
+  auth: inherit
+}
+
+vars:pre-request {
+  jobIdMedia: 01M8EDTJJQGQY2FBXHTJ4Y40FA-1541da453b81
+}
+
+tests {
+  test("HTTP 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
+
+docs {
+  Laedt die gehostete Audiodatei des Jobs herunter (oder liefert sie als Quelle
+  fuer asr: POST /v1/asr mit file_url=<diese URL>). Voraussetzung: Job completed.
+  Hinweis: Die Datei wird nach Ablauf der TTL automatisch geloescht (404).
+}

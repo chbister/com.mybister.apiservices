@@ -18,7 +18,8 @@ SERVICES = [
     "debug-processor",
     "barcode",
     "callback-tester",
-    "ocrpdf"
+    "ocrpdf",
+    "media"
 ]
 
 @pytest.mark.parametrize("service", SERVICES)
@@ -111,3 +112,33 @@ def test_debug_processor_e2e():
     assert "segments" in data
     # Check if at least some analysis was performed
     assert "sentiment" in data["analysis"]
+
+
+def test_media_resolve():
+    """E2E test for media resolve service (link -> hosted audio URL).
+
+    Opt-in via MEDIA_RESOLVE_E2E=1 because it downloads from an external
+    platform (YouTube) and therefore needs network access.
+    """
+    if os.getenv("MEDIA_RESOLVE_E2E") != "1":
+        pytest.skip("Set MEDIA_RESOLVE_E2E=1 to run (downloads an external media URL)")
+
+    url = f"{BASE_URL}/media/v1/media/resolve"
+    payload = {"url": "https://www.youtube.com/watch?v=jNQXAC9IVRw", "ttl_hours": 1}
+    response = httpx.post(url, json=payload, timeout=30.0)
+    assert response.status_code == 202
+    job_id = response.json()["job_id"]
+
+    status_url = f"{BASE_URL}/media/v1/media/status/{job_id}"
+    for _ in range(60):
+        data = httpx.get(status_url, timeout=10.0).json()
+        if data["status"] != "processing":
+            break
+        time.sleep(2)
+    assert data["status"] == "completed", data.get("error")
+    assert "result" in data
+    assert "file_url" in data["result"]
+
+    file_response = httpx.get(data["result"]["file_url"], timeout=30.0)
+    assert file_response.status_code == 200
+    assert len(file_response.content) > 0
