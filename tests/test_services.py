@@ -1,5 +1,6 @@
 import pytest
 import httpx
+import base64
 import time
 import os
 
@@ -19,6 +20,7 @@ SERVICES = [
     "barcode",
     "callback-tester",
     "ocrpdf",
+    "ics",
     "media"
 ]
 
@@ -142,3 +144,55 @@ def test_media_resolve():
     file_response = httpx.get(data["result"]["file_url"], timeout=30.0)
     assert file_response.status_code == 200
     assert len(file_response.content) > 0
+
+
+def test_generate_ics():
+    """E2E test for the ICS generator (event calendar)."""
+    url = f"{BASE_URL}/ics/v1/generate-ics"
+    payload = {
+        "timezone": "Europe/Berlin",
+        "events": [
+            {
+                "start": "2026-05-01T10:00:00",
+                "end": "2026-05-01T11:00:00",
+                "summary": "Team Meeting",
+                "location": "Berlin",
+                "description": "Quarterly planning",
+            }
+        ],
+    }
+    response = httpx.post(url, json=payload, timeout=30.0)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["fileName"] == "schedule.ics"
+    assert data["mimeType"] == "text/calendar"
+
+    ics = base64.b64decode(data["data"]).decode("utf-8")
+    assert "BEGIN:VCALENDAR" in ics
+    assert "BEGIN:VEVENT" in ics
+    assert "Team Meeting" in ics
+
+
+def test_generate_ics_invalid_payload():
+    """Validation errors from the ICS generator come back as JSON 400."""
+    url = f"{BASE_URL}/ics/v1/generate-ics"
+    response = httpx.post(
+        url, json={"events": [{"start": "not-a-date", "end": "x", "summary": "A"}]}, timeout=30.0
+    )
+    assert response.status_code == 400
+    assert "error" in response.json()
+
+
+def test_generate_birthday_cal():
+    """E2E test for the birthday calendar generator."""
+    url = f"{BASE_URL}/ics/v1/generate-birthday-cal"
+    payload = {"birthdays": [{"name": "Anna", "date": "1990-07-04"}]}
+    response = httpx.post(url, json=payload, timeout=30.0)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["fileName"] == "birthdays.ics"
+
+    ics = base64.b64decode(data["data"]).decode("utf-8")
+    assert "BEGIN:VCALENDAR" in ics
+    assert "RRULE:FREQ=YEARLY" in ics
+    assert "Birthday: Anna" in ics

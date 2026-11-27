@@ -1852,6 +1852,81 @@ services:
           - ocrpdf-link
 
 
+  # ---------------------------------------------------------------------------
+  # ics – ICS-Kalendergenerator (Node.js, ics-service):
+  #   POST /v1/generate-ics        Termine/Zeitplan als .ics (base64)
+  #   POST /v1/generate-birthday-cal Jahresgeburtstage als .ics (base64)
+  #   GET  /health                 ohne API-Key (eigener Traefik-Router)
+  # Prod: Host-Router mit TLS + ForwardAuth; Dev: Pfad-Routing unter /ics.
+  # ---------------------------------------------------------------------------
+  ics:
+    image: ghcr.io/chbister/ics:latest
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.ics.rule=Host(`ics.api.mybister.com`)"
+      - "traefik.http.routers.ics.entrypoints=websecure"
+      - "traefik.http.routers.ics.tls=true"
+      - "traefik.http.routers.ics.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ics.middlewares=apikey-auth"
+      - "traefik.http.routers.ics-health.rule=Host(`ics.api.mybister.com`) && Path(`/health`)"
+      - "traefik.http.routers.ics-health.entrypoints=websecure"
+      - "traefik.http.routers.ics-health.tls=true"
+      - "traefik.http.routers.ics-health.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ics-health.priority=100"
+      - "traefik.http.routers.ics-health.service=ics"
+      - "traefik.http.services.ics.loadbalancer.server.port=3000"
+    expose:
+      - "3000"
+    environment:
+      <<: *common-env
+      NODE_ENV: "production"
+      MAX_EVENTS: "${ICS_MAX_EVENTS:-2000}"
+      MAX_BIRTHDAYS: "${ICS_MAX_BIRTHDAYS:-2000}"
+    restart: unless-stopped
+    profiles: [ "prod" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - ics-link
+
+  ics-image-builder:
+    build:
+      context: ./ics-service
+    image: ghcr.io/chbister/ics:latest
+    profiles: [ "build" ]
+    entrypoint: ["echo", "Service ics-image-builder is only for building the image"]
+    restart: "no"
+
+  ics-dev:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${EDGE_NETWORK_NAME:-dev-shared-network}"
+      - "traefik.http.routers.ics-dev.rule=PathPrefix(`/ics`)"
+      - "traefik.http.routers.ics-dev.entrypoints=web"
+      - "traefik.http.routers.ics-dev.middlewares=ics-strip"
+      - "traefik.http.middlewares.ics-strip.stripprefix.prefixes=/ics"
+      - "traefik.http.services.ics-dev.loadbalancer.server.port=3000"
+    build:
+      context: ./ics-service
+    image: ics:local
+    expose:
+      - "3000"
+    environment:
+      <<: *common-env
+      NODE_ENV: "production"
+      MAX_EVENTS: "${ICS_MAX_EVENTS:-2000}"
+      MAX_BIRTHDAYS: "${ICS_MAX_BIRTHDAYS:-2000}"
+    restart: unless-stopped
+    profiles: [ "dev" ]
+    networks:
+      edge:
+      app:
+        aliases:
+          - ics-link
+
+
 volumes:
   hf_cache:
   paddle_cache:

@@ -167,6 +167,23 @@ Simulates a webhook receiver for testing asynchronous ASR callbacks.
     - Stores the payload and headers as JSON files.
 - **List Received**: `GET https://callback-tester.api.mybister.com/list`
 
+### 14. ICS Generator (Node.js, `ics-service`)
+Generates iCalendar (`.ics`) files as base64 – event schedules and yearly birthday calendars
+(migrated from the standalone `~/icsgenerator` instance).
+- **Events**: `POST https://ics.api.mybister.com/v1/generate-ics` with
+  `{"timezone": "Europe/Berlin", "events": [{"start": "2026-05-01T10:00:00", "end": "2026-05-01T11:00:00", "summary": "…", "location": "…", "description": "…"}]}`.
+  Optional: `prodId`, `name`, `calName`; per event optional `uid`.
+- **Birthdays**: `POST https://ics.api.mybister.com/v1/generate-birthday-cal` with
+  `{"birthdays": [{"name": "Anna", "date": "1990-07-04"}]}` – all-day events with
+  `RRULE:FREQ=YEARLY`.
+- **Response**: `{"fileName": "schedule.ics", "mimeType": "text/calendar", "data": "<base64>"}`.
+  Invalid payloads return JSON `400` (`{"error": "…"}`).
+- **Health**: `GET https://ics.api.mybister.com/health` (free of the API key, like every service).
+- **Prod**: host `ics.api.mybister.com` on **b02** (`tools/service_registry.json`), Traefik
+  ForwardAuth on all routes except `/health`.
+- **Dev**: path routing `http://localhost/ics/...` (container `ics-dev`, image `ics:local`).
+- **Config**: `ICS_MAX_EVENTS`, `ICS_MAX_BIRTHDAYS` (both default 2000, payload caps).
+
 ---
 
 ## 🔄 Correlations & Relations

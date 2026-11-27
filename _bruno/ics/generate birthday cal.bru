@@ -1,0 +1,48 @@
+meta {
+  name: generate birthday cal
+  type: http
+  seq: 3
+}
+
+docs {
+  Jahresgeburtstagskalender: all-day Events mit RRULE:FREQ=YEARLY.
+  JSON-Body {birthdays[] = {name, date(YYYY-MM-DD)}, prodId?, name?, calName?} ->
+  200 {fileName, mimeType, data(base64)}.
+}
+
+post {
+  url: {{baseUrlIcs}}/v1/generate-birthday-cal
+  body: json
+  auth: inherit
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "birthdays": [
+      { "name": "Anna", "date": "1990-07-04" },
+      { "name": "Tim", "date": "1988-12-24" }
+    ]
+  }
+}
+
+tests {
+  test("HTTP 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("Antwort enthaelt die erwarteten Felder", function() {
+    const body = res.getBody();
+    expect(body).to.have.property("fileName");
+    expect(body.fileName).to.equal("birthdays.ics");
+    expect(body).to.have.property("mimeType");
+    expect(body).to.have.property("data");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

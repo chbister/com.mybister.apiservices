@@ -347,7 +347,7 @@ ohne Token.
 
 ## 6. Geplante CNAMEs (Erstinitialisierung)
 
-Alle 22 eigenständig deploybaren Services aus `tools/service_registry.json`
+Alle 24 eigenständig deploybaren Services aus `tools/service_registry.json`
 (Ziel-Host jeweils aus dem Registry-Feld `host`):
 
 | Service-ID | DNS-Name | Typ | Ziel |
@@ -366,6 +366,7 @@ Alle 22 eigenständig deploybaren Services aus `tools/service_registry.json`
 | `debug-processor` | `debug-processor.api.mybister.com` | CNAME | `b01.mybister.com.` |
 | `tts` | `tts.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `convert` | `convert.api.mybister.com` | CNAME | `b02.mybister.com.` |
+| `media` | `media.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `ocr` | `ocr.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `ocrpdf` | `ocrpdf.api.mybister.com` | CNAME | `b03.mybister.com.` |
 | `extraction` | `extraction.api.mybister.com` | CNAME | `b03.mybister.com.` |
@@ -374,6 +375,7 @@ Alle 22 eigenständig deploybaren Services aus `tools/service_registry.json`
 | `metadata` | `metadata.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `barcode` | `barcode.api.mybister.com` | CNAME | `b02.mybister.com.` |
 | `qrcode` | `qrcode.api.mybister.com` | CNAME | `b02.mybister.com.` |
+| `ics` | `ics.api.mybister.com` | CNAME | `b02.mybister.com.` |
 
 Skalierte Replikate (`--scale barcode=2`, `--scale metadata=2`) teilen sich
 jeweils **eine** Service-ID und erhalten **einen** CNAME.
@@ -564,12 +566,12 @@ Grundlage ist die zentrale, deklarative Registry **`tools/service_registry.json`
 Alle 21 vorab genannten Service-IDs existieren als eigenständig deploybare
 Services in `docker-compose.yml` (Traefik-Regel `Host(\`<service-id>.api.mybister.com\`)`,
 hostname-basiertes HTTPS-Routing ohne PathPrefix)
-und sind unverändert übernommen; inzwischen ergänzt: `ocrpdf`:
+und sind unverändert übernommen; inzwischen ergänzt: `ocrpdf`, `media`, `ics`:
 
 `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `sentiment`,
 `emotion`, `emotion-nuance`, `emotion-state`, `emotion-vibe`, `emotion-hate`,
-`debug-processor`, `tts`, `convert`, `ocr`, `ocrpdf`, `extraction`, `ner`,
-`resume`, `metadata`, `barcode`, `qrcode`
+`debug-processor`, `tts`, `convert`, `media`, `ocr`, `ocrpdf`, `extraction`, `ner`,
+`resume`, `metadata`, `barcode`, `qrcode`, `ics`
 
 **Ziel-Host pro Service (Feld `host`):** Jeder Registry-Eintrag trägt den
 Host, auf dem der Service in der Deployment-Verteilung läuft – damit ist die
@@ -578,7 +580,7 @@ Registry die Single Source of Truth für DNS **und** Verteilung:
 | Host | Services |
 |---|---|
 | `b01` | `emotion`, `emotion-nuance`, `emotion-state`, `emotion-vibe`, `emotion-hate`, `debug-processor` |
-| `b02` | `metadata`, `convert`, `resume`, `barcode`, `qrcode` |
+| `b02` | `metadata`, `convert`, `media`, `resume`, `barcode`, `qrcode`, `ics` |
 | `b03` | `asr-tiny`, `asr-small`, `asr-medium`, `asr-large`, `diarization`, `sentiment`, `ner`, `extraction`, `ocr`, `ocrpdf`, `tts` |
 
 Das Feld treibt die `EXPECTED`-Spalte in `list`/`get` (Fallback:
@@ -614,6 +616,20 @@ Bewusst **nicht** aufgenommen (unter `excluded` dokumentiert):
 | `food-recognition` | Code vorhanden, aber nicht in `docker-compose.yml` deploybar |
 | `statusbar` | Code vorhanden, aber nicht in `docker-compose.yml` deploybar |
 | `asr-vibevoice` | `asr-service-vibevoice` nicht in `docker-compose.yml` hinterlegt |
+| `llm` | in Entwicklung – Hostregel existiert, aber noch keine Registry-/DNS-Verwaltung |
+| `browseric` | in Entwicklung – Hostregel existiert, aber noch keine Registry-/DNS-Verwaltung |
+| `browseric-comments` | in Entwicklung – Teilrouter von `browseric` |
+| `browseric-ui` | in Entwicklung – Teilrouter von `browseric` |
+
+Services **in Entwicklung** bekommen ihren Registry-Eintrag (und damit CNAME +
+Deploy-Zuweisung), sobald sie ausgeliefert werden. Bis dahin reicht ein Eintrag
+unter `excluded`: Die Sync-Tests lassen diese Compose-Router dann bewusst
+außen vor (`test_registry_matches_docker_compose_services`,
+`test_prod_routers_use_dedicated_service_hosts`) – ihre Hostnamen sind noch
+nicht final. `excluded` erscheint weder in `compose_services_for` noch in
+`deploy_targets --others`, der Deploy-Workflow startet und stoppt diese
+Services also **nicht** (sie bleiben in ihrem aktuellen Zustand); für sie
+entsteht kein CNAME.
 
 Modellvarianten (ASR tiny/small/medium/large, Emotion-Nuance/State/Vibe/Hate)
 sind jeweils **eigenständig deploybare Compose-Services** mit eigenem
@@ -623,7 +639,8 @@ Traefik-Router und erhalten daher eigene CNAMEs. Replikate (`barcode`,
 Ein automatisierter Test (`test_registry_matches_docker_compose_services`)
 prüft, dass Registry und `docker-compose.yml` synchron bleiben: neue
 Compose-Services mit Host-Regel müssen in der Registry ergänzt werden (und
-umgekehrt).
+umgekehrt) – Ausnahme sind `excluded`-Einträge (noch in Entwicklung) und
+`callback-tester`.
 
 ## 14. Tests
 

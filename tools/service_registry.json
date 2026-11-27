@@ -138,6 +138,12 @@
       "description": "Asynchrones PDF-OCR (Node.js, hinter nginx-LB auf Port 3000, in prod skaliert)",
       "compose_service": "ocrpdf-lb",
       "host": "b03"
+    },
+    {
+      "id": "ics",
+      "description": "ICS-Kalendergenerator (Termine & Geburtstage, Node.js)",
+      "compose_service": "ics",
+      "host": "b02"
     }
   ],
   "components": [

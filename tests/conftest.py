@@ -23,6 +23,7 @@ SERVICES = [
     "barcode",
     "callback-tester",
     "ocrpdf",
+    "ics",
     "media"
 ]
 
