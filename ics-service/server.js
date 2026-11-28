@@ -42,6 +42,72 @@ function isValidDate(value) {
   return typeof value === 'string' && DateTime.fromISO(value).isValid;
 }
 
+// Kurzbeschreibung des empfangenen Werts für Fehlermeldungen (gekürzt, damit
+// ein kaputter Payload-Teil die Antwort nicht sprengt).
+function describe(value) {
+  if (value === undefined) return 'undefined (missing)';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (typeof value === 'object') {
+    const json = (() => {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return '';
+      }
+    })();
+    return json.length > 60 ? `${json.slice(0, 57)}...` : json;
+  }
+  return String(value);
+}
+
+// Normalisiert ein Geburtsdatum auf YYYY-MM-DD oder null, wenn der Wert kein
+// Datum ist. Akzeptiert: ISO (YYYY-MM-DD mit optionalem Teil "THH:MM:SS"),
+// DD.MM.YYYY, YYYY/MM/DD sowie Epoch-Millisekunden (Zahl).
+function normalizeBirthdayDate(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    const dt = DateTime.fromMillis(value);
+    return dt.isValid ? dt.toISODate() : null;
+  }
+  if (typeof value !== 'string') return null;
+
+  const raw = value.trim();
+  if (raw === '') return null;
+
+  const iso = DateTime.fromISO(raw);
+  if (iso.isValid) return iso.toISODate();
+
+  const de = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(raw);
+  if (de) {
+    const dt = DateTime.fromObject({
+      day: Number(de[1]),
+      month: Number(de[2]),
+      year: Number(de[3]),
+    });
+    if (dt.isValid) return dt.toISODate();
+  }
+
+  const ymd = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(raw);
+  if (ymd) {
+    const dt = DateTime.fromObject({
+      year: Number(ymd[1]),
+      month: Number(ymd[2]),
+      day: Number(ymd[3]),
+    });
+    if (dt.isValid) return dt.toISODate();
+  }
+
+  return null;
+}
+
+// skip_invalid: true lässt fehlerhafte Einträge fallen, statt mit 400 zu
+// antworten; die Antwort weist dann die Anzahl aus (Feld "skipped").
+function wantsSkipInvalid(value) {
+  return value === true || value === 'true';
+}
+
 function sendIcs(res, fileName, calendar) {
   const icsContent = calendar.toString();
   const base64 = Buffer.from(icsContent, 'utf8').toString('base64');
@@ -77,7 +143,10 @@ app.post('/v1/generate-ics', (req, res) => {
     prodId = '//mybister.com//ics-generator//EN',
     name = 'myb Generic Calendar Name',
     calName = 'myb Generic Calendar Name',
+    skip_invalid = false,
   } = body;
+
+  const skipInvalid = wantsSkipInvalid(skip_invalid);
 
   if (!isValidTimezone(timezone)) {
     return badRequest(res, `invalid timezone: ${JSON.stringify(timezone)}`);
@@ -92,25 +161,34 @@ app.post('/v1/generate-ics', (req, res) => {
   const calendar = ical({ prodId, name, timezone });
   calendar.name(calName);
 
+  let skipped = 0;
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
+    let error = null;
+
     if (!ev || typeof ev !== 'object') {
-      return badRequest(res, `events[${i}] must be an object`);
+      error = `events[${i}] must be an object, got ${describe(ev)}`;
+    } else if (typeof ev.summary !== 'string' || ev.summary.trim() === '') {
+      error = `events[${i}].summary is required, got ${describe(ev.summary)}`;
+    } else if (!isValidDate(ev.start)) {
+      error = `events[${i}].start must be an ISO-8601 date-time, got ${describe(ev.start)}`;
+    } else if (!isValidDate(ev.end)) {
+      error = `events[${i}].end must be an ISO-8601 date-time, got ${describe(ev.end)}`;
     }
-    if (typeof ev.summary !== 'string' || ev.summary.trim() === '') {
-      return badRequest(res, `events[${i}].summary is required`);
-    }
-    if (!isValidDate(ev.start)) {
-      return badRequest(res, `events[${i}].start must be an ISO-8601 date-time`);
-    }
-    if (!isValidDate(ev.end)) {
-      return badRequest(res, `events[${i}].end must be an ISO-8601 date-time`);
+
+    if (error) {
+      if (!skipInvalid) return badRequest(res, error);
+      skipped += 1;
+      continue;
     }
 
     const start = DateTime.fromISO(ev.start, { zone: timezone });
     const end = DateTime.fromISO(ev.end, { zone: timezone });
     if (end.toMillis() <= start.toMillis()) {
-      return badRequest(res, `events[${i}].end must be after start`);
+      error = `events[${i}].end must be after start`;
+      if (!skipInvalid) return badRequest(res, error);
+      skipped += 1;
+      continue;
     }
 
     const uid =
@@ -127,7 +205,19 @@ app.post('/v1/generate-ics', (req, res) => {
     });
   }
 
-  console.log(`generate-ics: ${events.length} event(s), timezone=${timezone}`);
+  console.log(
+    `generate-ics: ${events.length - skipped} event(s), timezone=${timezone}` +
+      (skipInvalid ? `, skipped=${skipped}` : '')
+  );
+  if (skipInvalid) {
+    const icsContent = calendar.toString();
+    return res.json({
+      fileName: 'schedule.ics',
+      mimeType: 'text/calendar',
+      data: Buffer.from(icsContent, 'utf8').toString('base64'),
+      skipped,
+    });
+  }
   return sendIcs(res, 'schedule.ics', calendar);
 });
 
@@ -141,7 +231,10 @@ app.post('/v1/generate-birthday-cal', (req, res) => {
     prodId = '//mybister.com//birthday-cal//EN',
     name = 'Birthday Calendar',
     calName = 'Birthday Calendar',
+    skip_invalid = false,
   } = body;
+
+  const skipInvalid = wantsSkipInvalid(skip_invalid);
 
   if (!Array.isArray(birthdays)) {
     return badRequest(res, 'birthdays must be an array');
@@ -153,19 +246,34 @@ app.post('/v1/generate-birthday-cal', (req, res) => {
   const calendar = ical({ prodId, name });
   calendar.name(calName);
 
+  let skipped = 0;
   for (let i = 0; i < birthdays.length; i++) {
     const bd = birthdays[i];
+    let error = null;
+    let isoDate = null;
+
     if (!bd || typeof bd !== 'object') {
-      return badRequest(res, `birthdays[${i}] must be an object`);
-    }
-    if (typeof bd.name !== 'string' || bd.name.trim() === '') {
-      return badRequest(res, `birthdays[${i}].name is required`);
-    }
-    if (!isValidDate(bd.date)) {
-      return badRequest(res, `birthdays[${i}].date must be an ISO-8601 date (YYYY-MM-DD)`);
+      error = `birthdays[${i}] must be an object, got ${describe(bd)}`;
+    } else if (typeof bd.name !== 'string' || bd.name.trim() === '') {
+      error =
+        `birthdays[${i}].name is required and must be a non-empty string, ` +
+        `got ${describe(bd.name)}`;
+    } else {
+      isoDate = normalizeBirthdayDate(bd.date);
+      if (!isoDate) {
+        error =
+          `birthdays[${i}].date must be an ISO-8601 date (YYYY-MM-DD), ` +
+          `got ${describe(bd.date)}`;
+      }
     }
 
-    const date = DateTime.fromISO(bd.date);
+    if (error) {
+      if (!skipInvalid) return badRequest(res, error);
+      skipped += 1;
+      continue;
+    }
+
+    const date = DateTime.fromISO(isoDate);
     const uid = `${date.toFormat('MMdd')}-${bd.name}-${uuidv4()}`;
 
     calendar.createEvent({
@@ -177,7 +285,19 @@ app.post('/v1/generate-birthday-cal', (req, res) => {
     });
   }
 
-  console.log(`generate-birthday-cal: ${birthdays.length} birthday(s)`);
+  console.log(
+    `generate-birthday-cal: ${birthdays.length - skipped} birthday(s)` +
+      (skipInvalid ? `, skipped=${skipped}` : '')
+  );
+  if (skipInvalid) {
+    const icsContent = calendar.toString();
+    return res.json({
+      fileName: 'birthdays.ics',
+      mimeType: 'text/calendar',
+      data: Buffer.from(icsContent, 'utf8').toString('base64'),
+      skipped,
+    });
+  }
   return sendIcs(res, 'birthdays.ics', calendar);
 });
 
