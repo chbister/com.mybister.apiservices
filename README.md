@@ -175,9 +175,13 @@ Generates iCalendar (`.ics`) files as base64 – event schedules and yearly birt
   Optional: `prodId`, `name`, `calName`; per event optional `uid`.
 - **Birthdays**: `POST https://ics.api.mybister.com/v1/generate-birthday-cal` with
   `{"birthdays": [{"name": "Anna", "date": "1990-07-04"}]}` – all-day events with
-  `RRULE:FREQ=YEARLY`.
+  `RRULE:FREQ=YEARLY`. Dates accept ISO (`YYYY-MM-DD`, optional time part), `DD.MM.YYYY`,
+  `YYYY/MM/DD` and epoch-milliseconds; anything else (`null`, missing, garbage) is a `400`
+  whose message includes the received value.
 - **Response**: `{"fileName": "schedule.ics", "mimeType": "text/calendar", "data": "<base64>"}`.
   Invalid payloads return JSON `400` (`{"error": "…"}`).
+- **Tolerant mode**: with `"skip_invalid": true` (either endpoint) invalid entries are dropped
+  instead of failing; the response then contains `"skipped": <n>`.
 - **Health**: `GET https://ics.api.mybister.com/health` (free of the API key, like every service).
 - **Prod**: host `ics.api.mybister.com` on **b02** (`tools/service_registry.json`), Traefik
   ForwardAuth on all routes except `/health`.

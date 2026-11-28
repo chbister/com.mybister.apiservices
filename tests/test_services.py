@@ -196,3 +196,55 @@ def test_generate_birthday_cal():
     assert "BEGIN:VCALENDAR" in ics
     assert "RRULE:FREQ=YEARLY" in ics
     assert "Birthday: Anna" in ics
+
+
+def test_generate_birthday_cal_invalid_date_reports_value():
+    """A rejected date reports the value that was actually received."""
+    url = f"{BASE_URL}/ics/v1/generate-birthday-cal"
+
+    response = httpx.post(
+        url, json={"birthdays": [{"name": "Anna", "date": None}]}, timeout=30.0
+    )
+    assert response.status_code == 400
+    assert "birthdays[0].date" in response.json()["error"]
+    assert "got null" in response.json()["error"]
+
+    response = httpx.post(url, json={"birthdays": [{"name": "Anna"}]}, timeout=30.0)
+    assert response.status_code == 400
+    assert "undefined (missing)" in response.json()["error"]
+
+
+def test_generate_birthday_cal_lenient_date_formats():
+    """DD.MM.YYYY and epoch-milliseconds are accepted alongside ISO dates."""
+    url = f"{BASE_URL}/ics/v1/generate-birthday-cal"
+    payload = {
+        "birthdays": [
+            {"name": "Anna", "date": "04.07.1990"},
+            {"name": "Ben", "date": 647049600000},  # 1990-07-04T00:00:00Z
+        ]
+    }
+    response = httpx.post(url, json=payload, timeout=30.0)
+    assert response.status_code == 200
+
+    ics = base64.b64decode(response.json()["data"]).decode("utf-8")
+    assert ics.count("DTSTART;VALUE=DATE:19900704") == 2
+
+
+def test_generate_birthday_cal_skip_invalid():
+    """skip_invalid drops bad entries and reports how many were skipped."""
+    url = f"{BASE_URL}/ics/v1/generate-birthday-cal"
+    payload = {
+        "birthdays": [
+            {"name": "Anna", "date": None},
+            {"name": "Ben", "date": "1990-07-04"},
+        ],
+        "skip_invalid": True,
+    }
+    response = httpx.post(url, json=payload, timeout=30.0)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["skipped"] == 1
+
+    ics = base64.b64decode(data["data"]).decode("utf-8")
+    assert "Birthday: Ben" in ics
+    assert "Birthday: Anna" not in ics
